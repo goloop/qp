@@ -16,3 +16,5 @@ go get github.com/goloop/qp
 ## Usage
 
 The qp package includes functions for parsing various types of query parameters, such as integers, floats, strings, and booleans. It supports parsing both single values and slices of values. Additionally, it provides convenient functions for checking the presence and emptiness of query parameters.
+
+For more detailed information, read the [package documentation.](https://pkg.go.dev/github.com/goloop/qp)
