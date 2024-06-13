@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"reflect"
 	"testing"
+
+	"github.com/goloop/g"
 )
 
 // TestParseString tests the ParseString function.
@@ -131,6 +133,7 @@ func TestParseString(t *testing.T) {
 	}
 }
 
+// TestGetString tests the GetString function.
 func TestGetString(t *testing.T) {
 	key := "name"
 	tests := []struct {
@@ -193,11 +196,69 @@ func TestGetString(t *testing.T) {
 	}
 }
 
+// TestPullString tests the PullString function.
+func TestPullString(t *testing.T) {
+	key := "name"
+	tests := []struct {
+		name     string
+		query    string
+		opt      []string
+		expected *string
+	}{
+		{
+			name:     "Simple call",
+			query:    "name=john",
+			expected: g.Ptr("john"),
+		},
+		{
+			name:     "Without key",
+			opt:      []string{"bob"},
+			query:    "",
+			expected: nil, // nil, but not a default value
+		},
+		{
+			name:     "With default value",
+			opt:      []string{"bob"},
+			query:    "name=",
+			expected: g.Ptr("bob"), // default value, but not a nil
+		},
+		{
+			name:     "Default is part of valid values",
+			query:    "name=nik",
+			expected: g.Ptr("nik"),
+		},
+		{
+			name:     "Out of range",
+			query:    "name=lisa",
+			opt:      []string{"nik", "bob", "john"},
+			expected: g.Ptr("nik"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			u, _ := url.Parse("http://example.com?" + tc.query)
+			got := PullString(u, key, tc.opt...)
+
+			if got == nil && tc.expected != nil {
+				t.Errorf("PullString() = nil, want %v", *tc.expected)
+			} else if got != nil && tc.expected == nil {
+				t.Errorf("PullString() = %v, want nil", *got)
+			} else if got != nil && tc.expected != nil {
+				if *got != *tc.expected {
+					t.Errorf("PullString() = %v, want %v", *got, *tc.expected)
+				}
+			}
+		})
+	}
+}
+
 // TestParseStringSlice tests the ParseStringSlice function.
 func TestParseStringSlice(t *testing.T) {
 	tests := []struct {
 		name     string
 		query    string
+		opt      [][]string
 		expected *Result[[]string]
 	}{
 		{
@@ -260,7 +321,19 @@ func TestParseStringSlice(t *testing.T) {
 			query: "age=18",
 			expected: &Result[[]string]{
 				Key:      "names",
-				Value:    nil,
+				Value:    []string{},
+				Empty:    true,
+				Contains: false,
+				Error:    nil,
+			},
+		},
+		{
+			name:  "Without key with default value",
+			query: "age=18",
+			opt:   [][]string{{"alice", "bob", "charlie"}},
+			expected: &Result[[]string]{
+				Key:      "names",
+				Value:    []string{"alice", "bob", "charlie"},
 				Empty:    true,
 				Contains: false,
 				Error:    nil,
@@ -271,7 +344,7 @@ func TestParseStringSlice(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			u, _ := url.Parse("http://example.com?" + tc.query)
-			got := ParseStringSlice(u, tc.expected.Key)
+			got := ParseStringSlice(u, tc.expected.Key, tc.opt...)
 
 			if got.Value == nil && tc.expected.Value != nil ||
 				got.Value != nil && tc.expected.Value == nil {
@@ -304,7 +377,73 @@ func TestParseStringSlice(t *testing.T) {
 }
 
 // TestGetStringSlice tests the GetStringSlice function.
+// TestGetStringSlice tests the GetStringSlice function.
 func TestGetStringSlice(t *testing.T) {
+	key := "names"
+	tests := []struct {
+		name     string
+		query    string
+		opt      [][]string
+		expected []string
+		ok       bool
+	}{
+		{
+			name:     "Simple call",
+			query:    "names=alice",
+			expected: []string{"alice"},
+			ok:       true,
+		},
+		{
+			name:     "Slice as single value",
+			query:    "names=alice,bob,charlie",
+			expected: []string{"alice", "bob", "charlie"},
+			ok:       true,
+		},
+		{
+			name:     "Slice as multiple values",
+			query:    "names=alice&names=bob&names=charlie",
+			expected: []string{"alice", "bob", "charlie"},
+			ok:       true,
+		},
+		{
+			name:     "Empty value",
+			query:    "names=",
+			expected: []string{},
+			ok:       false,
+		},
+		{
+			name:     "Declared only",
+			query:    "names",
+			expected: []string{},
+			ok:       false,
+		},
+		{
+			name:     "Without key",
+			query:    "age=18",
+			expected: []string{},
+			ok:       false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			u, _ := url.Parse("http://example.com?" + tc.query)
+			got, ok := GetStringSlice(u, key, tc.opt...)
+
+			if !reflect.DeepEqual(got, tc.expected) {
+				t.Errorf("GetStringSlice() .Value = %v, want %v",
+					got, tc.expected)
+			}
+
+			if ok != tc.ok {
+				t.Errorf("GetStringSlice() .Ok = %v, want %v", ok, tc.ok)
+			}
+		})
+	}
+}
+
+// TestPullStringSlice tests the PullStringSlice function.
+func TestPullStringSlice(t *testing.T) {
 	key := "names"
 	tests := []struct {
 		name     string
@@ -346,15 +485,15 @@ func TestGetStringSlice(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			u, _ := url.Parse("http://example.com?" + tc.query)
-			got := GetStringSlice(u, key)
+			got := PullStringSlice(u, key)
 
 			if got == nil && tc.expected != nil {
-				t.Errorf("GetStringSlice() = nil, want %v", tc.expected)
+				t.Errorf("PullStringSlice() = nil, want %v", tc.expected)
 			} else if got != nil && tc.expected == nil {
-				t.Errorf("GetStringSlice() = %v, want nil", got)
+				t.Errorf("PullStringSlice() = %v, want nil", got)
 			} else if got != nil && tc.expected != nil {
 				if !reflect.DeepEqual(got, tc.expected) {
-					t.Errorf("GetStringSlice() = %v, want %v", got, tc.expected)
+					t.Errorf("PullStringSlice() = %v, want %v", got, tc.expected)
 				}
 			}
 		})

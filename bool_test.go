@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"reflect"
 	"testing"
+
+	"github.com/goloop/g"
 )
 
 // TestParseBool tests the ParseBool function.
@@ -247,6 +249,82 @@ func TestGetBool(t *testing.T) {
 	}
 }
 
+// TestPullBool tests the PullBool function.
+func TestPullBool(t *testing.T) {
+	key := "is_active"
+	tests := []struct {
+		name     string
+		query    string
+		opt      []bool
+		expected *bool
+	}{
+		{
+			name:     "Constants: true or false",
+			query:    "is_active=true",
+			opt:      nil,
+			expected: g.Ptr(true),
+		},
+		{
+			name:     "Constants: yes or no",
+			query:    "is_active=yes",
+			opt:      nil,
+			expected: g.Ptr(true),
+		},
+		{
+			name:     "Constants: 1 or 0",
+			query:    "is_active=1",
+			opt:      nil,
+			expected: g.Ptr(true),
+		},
+		{
+			name:     "Constants: on or off",
+			query:    "is_active=on",
+			opt:      nil,
+			expected: g.Ptr(true),
+		},
+		{
+			name:     "Empty value",
+			query:    "is_active=",
+			opt:      nil,
+			expected: g.Ptr(false),
+		},
+		{
+			name:     "Marked key",
+			query:    "is_active",
+			opt:      nil,
+			expected: g.Ptr(false),
+		},
+		{
+			name:     "With default value",
+			query:    "is_active=hello",
+			opt:      []bool{true},
+			expected: g.Ptr(true),
+		},
+		{
+			name:     "Without key",
+			query:    "message=hello",
+			opt:      []bool{true, false, true},
+			expected: nil, // nil, but not a pointer
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			u, _ := url.Parse("http://example.com?" + tc.query)
+			got := PullBool(u, key, tc.opt...)
+
+			if (got == nil && tc.expected != nil) ||
+				(got != nil && tc.expected == nil) {
+				t.Errorf("PullBool() = %v, want %v", got, tc.expected)
+			} else if got != nil && tc.expected != nil {
+				if *got != *tc.expected {
+					t.Errorf("PullBool() = %v, want %v", *got, *tc.expected)
+				}
+			}
+		})
+	}
+}
+
 // TestParseBoolSlice tests the ParseBoolSlice function.
 func TestParseBoolSlice(t *testing.T) {
 	tests := []struct {
@@ -386,6 +464,81 @@ func TestGetBoolSlice(t *testing.T) {
 		name     string
 		query    string
 		expected []bool
+		ok       bool
+	}{
+		{
+			name:     "Simple call",
+			query:    "flags=true",
+			expected: []bool{true},
+			ok:       true,
+		},
+		{
+			name:     "Slice as single value",
+			query:    "flags=true,false,yes,no",
+			expected: []bool{true, false, true, false},
+			ok:       true,
+		},
+		{
+			name:     "Slice as multiple values",
+			query:    "flags=true&flags=false&flags=yes&flags=no",
+			expected: []bool{true, false, true, false},
+			ok:       true,
+		},
+		{
+			name:     "Empty value",
+			query:    "flags=",
+			expected: []bool{},
+			ok:       false,
+		},
+		{
+			name:     "Declared only",
+			query:    "flags",
+			expected: []bool{},
+			ok:       false,
+		},
+		{
+			name:     "Without key",
+			query:    "age=18",
+			expected: nil,
+			ok:       false,
+		},
+		{
+			name:     "Incorrect as single value",
+			query:    "flags=true,string,false",
+			expected: []bool{},
+			ok:       false,
+		},
+		{
+			name:     "Incorrect as multiple values",
+			query:    "flags=true&flags=string&flags=false",
+			expected: []bool{},
+			ok:       false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			u, _ := url.Parse("http://example.com?" + tc.query)
+			got, ok := GetBoolSlice(u, key)
+
+			if !reflect.DeepEqual(got, tc.expected) {
+				t.Errorf("GetBoolSlice() .Value = %v, want %v", got, tc.expected)
+			}
+
+			if ok != tc.ok {
+				t.Errorf("GetBoolSlice() .Ok = %v, want %v", ok, tc.ok)
+			}
+		})
+	}
+}
+
+// TestPullBoolSlice tests the PullBoolSlice function.
+func TestPullBoolSlice(t *testing.T) {
+	key := "flags"
+	tests := []struct {
+		name     string
+		query    string
+		expected []bool
 	}{
 		{
 			name:     "Simple call",
@@ -432,15 +585,15 @@ func TestGetBoolSlice(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			u, _ := url.Parse("http://example.com?" + tc.query)
-			got := GetBoolSlice(u, key)
+			got := PullBoolSlice(u, key)
 
 			if got == nil && tc.expected != nil {
-				t.Errorf("GetBoolSlice() = nil, want %v", tc.expected)
+				t.Errorf("PullBoolSlice() = nil, want %v", tc.expected)
 			} else if got != nil && tc.expected == nil {
-				t.Errorf("GetBoolSlice() = %v, want nil", got)
+				t.Errorf("PullBoolSlice() = %v, want nil", got)
 			} else if got != nil && tc.expected != nil {
 				if !reflect.DeepEqual(got, tc.expected) {
-					t.Errorf("GetBoolSlice() = %v, want %v", got, tc.expected)
+					t.Errorf("PullBoolSlice() = %v, want %v", got, tc.expected)
 				}
 			}
 		})

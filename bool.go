@@ -3,7 +3,6 @@ package qp
 import (
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 )
 
@@ -55,23 +54,14 @@ func ParseBool(u *url.URL, key string, opt ...bool) *Result[bool] {
 
 	// Convert the result to an integer.
 	raw := strings.ToLower(data[0])
-	if raw == "1" || raw == "0" {
-		result.Value = raw == "1"
-	} else if raw == "yes" || raw == "no" {
-		result.Value = raw == "yes"
-	} else if raw == "on" || raw == "off" {
-		result.Value = raw == "on"
-	} else {
-		value, err := strconv.ParseBool(data[0])
-		if err != nil {
-			msg := "invalid value for key %s: %s"
-			result.Error = fmt.Errorf(msg, key, data[0])
-			return result
-		}
-
-		result.Value = value
+	value, err := parseBoolValue(raw)
+	if err != nil {
+		msg := "invalid value for key %s: %s"
+		result.Error = fmt.Errorf(msg, key, data[0])
+		return result
 	}
 
+	result.Value = value
 	return result
 }
 
@@ -104,6 +94,17 @@ func GetBool(u *url.URL, key string, opt ...bool) (bool, bool) {
 	return data.Value, data.Contains && !data.Empty && data.Error == nil
 }
 
+// PullBool is a convenience function to parse a boolean query parameter
+// and return the value.
+func PullBool(u *url.URL, key string, opt ...bool) *bool {
+	data := ParseBool(u, key, opt...)
+	if !data.Contains {
+		return nil
+	}
+
+	return &data.Value
+}
+
 // ParseBoolSlice parses a boolean slice query parameter from the given URL.
 //
 // The function accepts a URL and a key. If the query parameter is absent,
@@ -117,7 +118,8 @@ func GetBool(u *url.URL, key string, opt ...bool) (bool, bool) {
 //   - 1/0
 //
 // The function supports query parameters specified as a single string
-// (e.g., "?flags=true,false,yes,no") or as multiple values (e.g., "?flags=true&flags=false&flags=yes&flags=no").
+// (e.g., "?flags=true,false,yes,no") or as multiple values (e.g.,
+// "?flags=true&flags=false&flags=yes&flags=no").
 //
 // Example Usage:
 //
@@ -184,20 +186,15 @@ func ParseBoolSlice(u *url.URL, key string) *Result[[]bool] {
 	return result
 }
 
-// parseBoolValue parses a string and returns its boolean value if valid.
-func parseBoolValue(str string) (bool, error) {
-	raw := strings.ToLower(str)
-	switch raw {
-	case "1", "true", "yes", "on":
-		return true, nil
-	case "0", "false", "no", "off":
-		return false, nil
-	default:
-		return strconv.ParseBool(raw)
-	}
+// GetBoolSlice is the function to parse a boolean slice query parameter
+// and return the slice of values and a boolean indicating if the values
+// are valid.
+func GetBoolSlice(u *url.URL, key string) ([]bool, bool) {
+	data := ParseBoolSlice(u, key)
+	return data.Value, data.Contains && !data.Empty && data.Error == nil
 }
 
-// GetBoolSlice is a convenience function to parse a boolean slice query
+// PullBoolSlice is a convenience function to parse a boolean slice query
 // parameter and return the slice of values.
 //
 // The function accepts a URL and a key. If the query parameter is absent,
@@ -207,7 +204,7 @@ func parseBoolValue(str string) (bool, error) {
 // Example Usage:
 //
 //	// Simple call.
-//	values := GetBoolSlice(u, "flags")
+//	values := PullBoolSlice(u, "flags")
 //
 //	// Handling the result.
 //	if values == nil {
@@ -217,6 +214,6 @@ func parseBoolValue(str string) (bool, error) {
 //	} else {
 //	    fmt.Println("Parsed booleans:", values)
 //	}
-func GetBoolSlice(u *url.URL, key string) []bool {
+func PullBoolSlice(u *url.URL, key string) []bool {
 	return ParseBoolSlice(u, key).Value
 }

@@ -2,6 +2,8 @@ package qp
 
 import (
 	"net/url"
+	"strconv"
+	"strings"
 )
 
 // Value defines an interface for types supported by the query parsing
@@ -63,4 +65,17 @@ func Contains(u *url.URL, key string) bool {
 //	}
 func Empty(u *url.URL, key string) bool {
 	return u.Query().Get(key) == ""
+}
+
+// parseBoolValue parses a string and returns its boolean value if valid.
+func parseBoolValue(str string) (bool, error) {
+	raw := strings.ToLower(str)
+	switch raw {
+	case "1", "true", "yes", "on":
+		return true, nil
+	case "0", "false", "no", "off":
+		return false, nil
+	default:
+		return strconv.ParseBool(raw)
+	}
 }
