@@ -136,24 +136,31 @@ func PullBool(u *url.URL, key string, opt ...bool) *bool {
 //	} else {
 //	    fmt.Println("Query parameter is absent.")
 //	}
-func ParseBoolSlice(u *url.URL, key string) *Result[[]bool] {
+func ParseBoolSlice(u *url.URL, key string, opt ...[]bool) *Result[[]bool] {
 	result := &Result[[]bool]{Key: key, Contains: true}
 	data, ok := u.Query()[key]
 
+	// Default value.
+	result.Default = []bool{}
+	result.Value = result.Default
+	if len(opt) >= 1 {
+		result.Default = opt[0]
+		result.Value = result.Default
+	}
+
+	// Check if the query parameter is empty or missing.
 	if !ok {
-		result.Value = nil
 		result.Empty = true
 		result.Contains = false
 		return result
 	} else if data[0] == "" {
-		result.Value = []bool{} // not nil
 		result.Empty = true
 		result.Contains = true
 		return result
 	}
 
-	// An array can be specified as a single string "?flags=true,false,yes,no" or
-	// as multiple values "?flags=true&flags=false&flags=yes&flags=no".
+	// An array can be specified as a single string "?flags=true,false,yes,no"
+	// or as multiple values "?flags=true&flags=false&flags=yes&flags=no".
 	if len(data) > 1 {
 		// Multiple values.
 		result.Value = make([]bool, 0, len(data))
@@ -189,8 +196,8 @@ func ParseBoolSlice(u *url.URL, key string) *Result[[]bool] {
 // GetBoolSlice is the function to parse a boolean slice query parameter
 // and return the slice of values and a boolean indicating if the values
 // are valid.
-func GetBoolSlice(u *url.URL, key string) ([]bool, bool) {
-	data := ParseBoolSlice(u, key)
+func GetBoolSlice(u *url.URL, key string, opt ...[]bool) ([]bool, bool) {
+	data := ParseBoolSlice(u, key, opt...)
 	return data.Value, data.Contains && !data.Empty && data.Error == nil
 }
 
@@ -214,6 +221,11 @@ func GetBoolSlice(u *url.URL, key string) ([]bool, bool) {
 //	} else {
 //	    fmt.Println("Parsed booleans:", values)
 //	}
-func PullBoolSlice(u *url.URL, key string) []bool {
-	return ParseBoolSlice(u, key).Value
+func PullBoolSlice(u *url.URL, key string, opt ...[]bool) []bool {
+	data := ParseBoolSlice(u, key, opt...)
+	if !data.Contains {
+		return nil // not default
+	}
+
+	return data.Value
 }

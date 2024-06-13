@@ -392,7 +392,7 @@ func TestParseBoolSlice(t *testing.T) {
 			query: "age=18",
 			expected: &Result[[]bool]{
 				Key:      "flags",
-				Value:    nil,
+				Value:    []bool{},
 				Empty:    true,
 				Contains: false,
 				Error:    nil,
@@ -463,6 +463,7 @@ func TestGetBoolSlice(t *testing.T) {
 	tests := []struct {
 		name     string
 		query    string
+		opt      [][]bool
 		expected []bool
 		ok       bool
 	}{
@@ -491,6 +492,13 @@ func TestGetBoolSlice(t *testing.T) {
 			ok:       false,
 		},
 		{
+			name:     "Default value",
+			query:    "flags=",
+			opt:      [][]bool{{true, true, true}},
+			expected: []bool{true, true, true},
+			ok:       false,
+		},
+		{
 			name:     "Declared only",
 			query:    "flags",
 			expected: []bool{},
@@ -499,7 +507,7 @@ func TestGetBoolSlice(t *testing.T) {
 		{
 			name:     "Without key",
 			query:    "age=18",
-			expected: nil,
+			expected: []bool{},
 			ok:       false,
 		},
 		{
@@ -519,7 +527,7 @@ func TestGetBoolSlice(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			u, _ := url.Parse("http://example.com?" + tc.query)
-			got, ok := GetBoolSlice(u, key)
+			got, ok := GetBoolSlice(u, key, tc.opt...)
 
 			if !reflect.DeepEqual(got, tc.expected) {
 				t.Errorf("GetBoolSlice() .Value = %v, want %v", got, tc.expected)

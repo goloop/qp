@@ -628,6 +628,7 @@ func TestGetIntSlice(t *testing.T) {
 	tests := []struct {
 		name     string
 		query    string
+		opt      [][]int
 		expected []int
 		ok       bool
 	}{
@@ -653,6 +654,20 @@ func TestGetIntSlice(t *testing.T) {
 			name:     "Empty value",
 			query:    "ids=",
 			expected: []int{},
+			ok:       false,
+		},
+		{
+			name:     "Default value",
+			query:    "ids=",
+			opt:      [][]int{{1, 2, 3}},
+			expected: []int{1, 2, 3},
+			ok:       false,
+		},
+		{
+			name:     "Default value as nil",
+			query:    "ids",
+			opt:      [][]int{nil},
+			expected: nil,
 			ok:       false,
 		},
 		{
@@ -684,7 +699,7 @@ func TestGetIntSlice(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			u, _ := url.Parse("http://example.com?" + tc.query)
-			got, ok := GetIntSlice(u, key)
+			got, ok := GetIntSlice(u, key, tc.opt...)
 
 			if !reflect.DeepEqual(got, tc.expected) {
 				t.Errorf("GetIntSlice() = %v, want %v", got, tc.expected)

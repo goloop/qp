@@ -25,10 +25,50 @@ true only if the key was found and the value was correctly parsed and falls
 within the specified limits.
 
 - Pull methods return a pointer or nil:
+
   - nil if the key is absent;
+
   - a pointer to the default value if the key is present but empty
     or has invalid data;
+
   - a pointer to the parsed result if everything is parsed correctly.
+
+Convenience of using Pull type methods:
+
+	// where returns a WHERE clause for a SQL query based on the provided
+	// boolean values. It accepts three boolean pointers: isActive, isStaff,
+	// and isSuperuser. If any of these pointers are nil, the corresponding
+	// condition is not included in the WHERE clause.
+	func where(isActive, isStaff, isSuperuser *bool) string {
+	    check := [...]struct {
+	        name  string
+	        value *bool
+	    }{
+	        {name: "is_active", value: isActive},
+	        {name: "is_staff", value: isStaff},
+	        {name: "is_superuser", value: isSuperuser},
+	    }
+
+	    and := make([]string, 0, len(check))
+	    for _, m := range check {
+	        if m.value != nil {
+	            and = append(and, fmt.Sprintf("%s=%t", m.name, *m.value))
+	        }
+	    }
+
+	    if len(and) != 0 {
+	        return "WHERE " + strings.Join(and, ", ")
+	    }
+
+	    return ""
+	}
+
+	u, _ := url.Parse("http://example.com?is_active=true&is_staff=false")
+	isActive := qp.PullBool(u, "is_active")
+	isStaff := qp.PullBool(u, "is_staff")
+	isSuperuser := qp.PullBool(u, "is_superuser") // nil
+	query := where(isActive, isStaff, isSuperuser)
+	// Result: WHERE is_active=true, is_staff=false
 
 # Example Usage
 

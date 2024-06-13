@@ -648,6 +648,20 @@ func TestGetFloatSlice(t *testing.T) {
 			ok:       false,
 		},
 		{
+			name:     "Default value",
+			query:    "ids=",
+			opt:      [][]float64{{1.0, 2.0, 3.0}},
+			expected: []float64{1.0, 2.0, 3.0},
+			ok:       false,
+		},
+		{
+			name:     "Default value as nil",
+			query:    "ids",
+			opt:      [][]float64{nil},
+			expected: nil,
+			ok:       false,
+		},
+		{
 			name:     "Declared only",
 			query:    "ids",
 			expected: []float64{},
