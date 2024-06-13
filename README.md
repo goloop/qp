@@ -3,7 +3,7 @@
 
 # qp
 
-`qp` is a package for parsing query parameters from URLs.
+The **qp** package for parsing query parameters from URLs.
 
 ## Installation
 
