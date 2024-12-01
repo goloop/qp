@@ -1,0 +1,42 @@
+goos: linux
+goarch: arm64
+pkg: github.com/goloop/qp
+BenchmarkBooleanParsing/ParseBool/empty-6         	16962578	        72.21 ns/op	     128 B/op	       2 allocs/op
+BenchmarkBooleanParsing/ParseBool/true-6          	 4666597	       247.5 ns/op	     496 B/op	       4 allocs/op
+BenchmarkBooleanParsing/ParseBool/withDefault-6   	16768250	        79.90 ns/op	     128 B/op	       2 allocs/op
+BenchmarkBooleanParsing/GetBool/valid-6           	 4336692	       285.0 ns/op	     496 B/op	       4 allocs/op
+BenchmarkBooleanParsing/PullBool/valid-6          	 4099012	       284.3 ns/op	     496 B/op	       4 allocs/op
+BenchmarkBooleanParsing/ParseBoolSlice/empty-6    	14614356	        89.88 ns/op	     208 B/op	       2 allocs/op
+BenchmarkBooleanParsing/ParseBoolSlice/single-6   	 3874093	       316.6 ns/op	     600 B/op	       6 allocs/op
+BenchmarkBooleanParsing/ParseBoolSlice/multiple-6 	 2918383	       383.5 ns/op	     632 B/op	       6 allocs/op
+BenchmarkBooleanParsing/ParseBoolSlice/separate-6 	 2477920	       487.4 ns/op	     675 B/op	       7 allocs/op
+BenchmarkFloatParsing/ParseFloat/empty-6          	17021528	        76.19 ns/op	     144 B/op	       2 allocs/op
+BenchmarkFloatParsing/ParseFloat/valid-6          	 4257726	       283.9 ns/op	     512 B/op	       4 allocs/op
+BenchmarkFloatParsing/ParseFloat/withRange-6      	 4198134	       265.0 ns/op	     512 B/op	       4 allocs/op
+BenchmarkFloatParsing/GetFloat/valid-6            	 4561221	       255.6 ns/op	     512 B/op	       4 allocs/op
+BenchmarkFloatParsing/PullFloat/valid-6           	 4587980	       258.6 ns/op	     512 B/op	       4 allocs/op
+BenchmarkFloatParsing/ParseFloatSlice/empty-6     	14410362	        84.29 ns/op	     208 B/op	       2 allocs/op
+BenchmarkFloatParsing/ParseFloatSlice/multiple-6  	 2309631	       489.7 ns/op	     680 B/op	       8 allocs/op
+BenchmarkFloatParsing/ParseFloatSlice/separate-6  	 2002696	       601.6 ns/op	     696 B/op	       7 allocs/op
+BenchmarkIntParsing/ParseInt/empty-6              	15768450	        76.73 ns/op	     144 B/op	       2 allocs/op
+BenchmarkIntParsing/ParseInt/valid-6              	 4017338	       263.4 ns/op	     512 B/op	       4 allocs/op
+BenchmarkIntParsing/ParseInt/withRange-6          	 3999194	       256.8 ns/op	     512 B/op	       4 allocs/op
+BenchmarkIntParsing/GetInt/valid-6                	 4889502	       285.9 ns/op	     512 B/op	       4 allocs/op
+BenchmarkIntParsing/PullInt/valid-6               	 4372940	       270.8 ns/op	     512 B/op	       4 allocs/op
+BenchmarkIntParsing/ParseIntSlice/empty-6         	13065621	        86.01 ns/op	     208 B/op	       2 allocs/op
+BenchmarkIntParsing/ParseIntSlice/multiple-6      	 2615124	       449.0 ns/op	     680 B/op	       8 allocs/op
+BenchmarkIntParsing/ParseIntSlice/separate-6      	 2289259	       498.0 ns/op	     696 B/op	       7 allocs/op
+BenchmarkStringParsing/ParseString/empty-6        	13489297	        81.36 ns/op	     176 B/op	       2 allocs/op
+BenchmarkStringParsing/ParseString/valid-6        	 4958954	       246.6 ns/op	     544 B/op	       4 allocs/op
+BenchmarkStringParsing/ParseString/withValidValues-6         	 2908272	       425.1 ns/op	     720 B/op	       9 allocs/op
+BenchmarkStringParsing/GetString/valid-6                     	 4246538	       245.6 ns/op	     544 B/op	       4 allocs/op
+BenchmarkStringParsing/PullString/valid-6                    	 4972708	       248.5 ns/op	     544 B/op	       4 allocs/op
+BenchmarkStringParsing/ParseStringSlice/empty-6              	14884126	        92.96 ns/op	     208 B/op	       2 allocs/op
+BenchmarkStringParsing/ParseStringSlice/multiple-6           	 3641031	       337.4 ns/op	     624 B/op	       5 allocs/op
+BenchmarkStringParsing/ParseStringSlice/separate-6           	 2433410	       489.9 ns/op	     720 B/op	       7 allocs/op
+BenchmarkUtilityFunctions/Contains/absent-6                  	27275266	        39.01 ns/op	      48 B/op	       1 allocs/op
+BenchmarkUtilityFunctions/Contains/present-6                 	 5353831	       241.2 ns/op	     416 B/op	       3 allocs/op
+BenchmarkUtilityFunctions/Empty/absent-6                     	29841280	        40.24 ns/op	      48 B/op	       1 allocs/op
+BenchmarkUtilityFunctions/Empty/present-6                    	 5645058	       225.4 ns/op	     416 B/op	       3 allocs/op
+PASS
+ok  	github.com/goloop/qp	54.088s

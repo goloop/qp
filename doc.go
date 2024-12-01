@@ -1,359 +1,195 @@
-/*
-Package qp provides utilities for parsing query parameters from URLs.
-
-This package includes functions for parsing various types of query parameters,
-such as integers, floats, strings, and booleans. It supports parsing both single
-values and slices of values. Additionally, it provides convenient functions for
-checking the presence and emptiness of query parameters.
-
-The functions in this package are designed to be robust and user-friendly,
-returning detailed results that include the parsed value, default value, and
-information about whether the query parameter was present and valid.
-
-# Parsing Functions Details
-
-The methods in this package are categorized into three types: Parse, Get,
-and Pull.
-
-- Parse methods return detailed results in a Result structure. This structure
-includes technical data such as errors, presence, and emptiness of the key,
-along with the parsed value, default value, and limits if any.
-
-- Get methods always return an object (never nil, even for slices) and
-a boolean indicating the presence and validity of the key. The boolean is
-true only if the key was found and the value was correctly parsed and falls
-within the specified limits.
-
-- Pull methods return a pointer or nil:
-
-  - nil if the key is absent;
-
-  - a pointer to the default value if the key is present but empty
-    or has invalid data;
-
-  - a pointer to the parsed result if everything is parsed correctly.
-
-Convenience of using Pull type methods:
-
-	// where returns a WHERE clause for a SQL query based on the provided
-	// boolean values. It accepts three boolean pointers: isActive, isStaff,
-	// and isSuperuser. If any of these pointers are nil, the corresponding
-	// condition is not included in the WHERE clause.
-	func where(isActive, isStaff, isSuperuser *bool) string {
-	    check := [...]struct {
-	        name  string
-	        value *bool
-	    }{
-	        {name: "is_active", value: isActive},
-	        {name: "is_staff", value: isStaff},
-	        {name: "is_superuser", value: isSuperuser},
-	    }
-
-	    and := make([]string, 0, len(check))
-	    for _, m := range check {
-	        if m.value != nil {
-	            and = append(and, fmt.Sprintf("%s=%t", m.name, *m.value))
-	        }
-	    }
-
-	    if len(and) != 0 {
-	        return "WHERE " + strings.Join(and, ", ")
-	    }
-
-	    return ""
-	}
-
-	u, _ := url.Parse("http://example.com?is_active=true&is_staff=false")
-	isActive := qp.PullBool(u, "is_active")
-	isStaff := qp.PullBool(u, "is_staff")
-	isSuperuser := qp.PullBool(u, "is_superuser") // nil
-	query := where(isActive, isStaff, isSuperuser)
-	// Result: WHERE is_active=true, is_staff=false
-
-# Example Usage
-
-Here are some examples of how to use the functions provided by this package:
-
-# Parsing Integer Query Parameters
-
-Parse a single integer query parameter:
-
-	u, _ := url.Parse("http://example.com?age=18")
-	result := qp.ParseInt(u, "age")
-	if result.Contains && !result.Empty && result.Error == nil {
-	    fmt.Println("Parsed integer:", result.Value)
-	} else {
-	    fmt.Println("Is empty:", result.Empty)
-	    fmt.Println("Is present:", result.Contains)
-	    fmt.Println("Failed to parse integer:", result.Error)
-	}
-
-Get a single integer query parameter:
-
-	u, _ := url.Parse("http://example.com?age=18")
-	value, ok := qp.GetInt(u, "age")
-	if ok {
-	    fmt.Println("Parsed integer:", value)
-	} else {
-	    fmt.Println("Default value:", value)
-	}
-
-Pull a single integer query parameter:
-
-	u, _ := url.Parse("http://example.com?age=18")
-	age := qp.PullInt(u, "age")
-	if age != nil {
-	    fmt.Println("Parsed integer:", *age)
-	} else {
-	    fmt.Println("Key 'age' is absent")
-	}
-
-Parse a slice of integer query parameters:
-
-	u, _ := url.Parse("http://example.com?ids=1,2,3")
-	result := qp.ParseIntSlice(u, "ids")
-	if result.Contains && !result.Empty && result.Error == nil {
-	    fmt.Println("Parsed integers:", result.Value)
-	} else {
-	    fmt.Println("Is empty:", result.Empty)
-	    fmt.Println("Is present:", result.Contains)
-	    fmt.Println("Failed to parse integers:", result.Error)
-	}
-
-Get a slice of integer query parameters:
-
-	u, _ := url.Parse("http://example.com?ids=1,2,3")
-	ids, ok := qp.GetIntSlice(u, "ids")
-	if ok {
-	    fmt.Println("Parsed integers:", ids)
-	} else {
-	    fmt.Println("Default value:", ids)
-	}
-
-Pull a slice of integer query parameters:
-
-	u, _ := url.Parse("http://example.com?ids=1,2,3") // or ?ids=1&ids=2&ids=3
-	ids := qp.PullIntSlice(u, "ids")
-	if ids != nil {
-	    fmt.Println("Parsed integers:", ids)
-	} else {
-	    fmt.Println("Key 'ids' is absent")
-	}
-
-# Parsing Float Query Parameters
-
-Parse a single float query parameter:
-
-	u, _ := url.Parse("http://example.com?temperature=36.6")
-	result := qp.ParseFloat(u, "temperature")
-	if result.Contains && !result.Empty && result.Error == nil {
-	    fmt.Println("Parsed float:", result.Value)
-	} else {
-	    fmt.Println("Is empty:", result.Empty)
-	    fmt.Println("Is present:", result.Contains)
-	    fmt.Println("Failed to parse float:", result.Error)
-	}
-
-Get a single float query parameter:
-
-	u, _ := url.Parse("http://example.com?temperature=36.6")
-	value, ok := qp.GetFloat(u, "temperature")
-	if ok {
-	    fmt.Println("Parsed float:", value)
-	} else {
-	    fmt.Println("Default value:", value)
-	}
-
-Pull a single float query parameter:
-
-	u, _ := url.Parse("http://example.com?temperature=36.6")
-	temperature := qp.PullFloat(u, "temperature")
-	if temperature != nil {
-	    fmt.Println("Parsed float:", *temperature)
-	} else {
-	    fmt.Println("Key 'temperature' is absent")
-	}
-
-Parse a slice of float query parameters:
-
-	u, _ := url.Parse("http://example.com?ids=1.1,2.2,3.3")
-	result := qp.ParseFloatSlice(u, "ids")
-	if result.Contains && !result.Empty && result.Error == nil {
-	    fmt.Println("Parsed floats:", result.Value)
-	} else {
-	    fmt.Println("Failed to parse floats:", result.Error)
-	}
-
-Get a slice of float query parameters:
-
-	u, _ := url.Parse("http://example.com?ids=1.1,2.2,3.3")
-	ids, ok := qp.GetFloatSlice(u, "ids")
-	if ok {
-	    fmt.Println("Parsed floats:", ids)
-	} else {
-	    fmt.Println("Default value:", ids)
-	}
-
-Pull a slice of float query parameters:
-
-	u, _ := url.Parse("http://example.com?ids=1.1,2.2,3.3")
-	ids := qp.PullFloatSlice(u, "ids")
-	if ids != nil {
-	    fmt.Println("Parsed floats:", ids)
-	} else {
-	    fmt.Println("Key 'ids' is absent")
-	}
-
-# Parsing String Query Parameters
-
-Parse a single string query parameter:
-
-	u, _ := url.Parse("http://example.com?name=alice")
-	result := qp.ParseString(u, "name")
-	if result.Contains && !result.Empty && result.Error == nil {
-	    fmt.Println("Parsed string:", result.Value)
-	} else {
-	    fmt.Println("Is empty:", result.Empty)
-	    fmt.Println("Is present:", result.Contains)
-	    fmt.Println("Failed to parse string:", result.Error)
-	}
-
-Get a single string query parameter:
-
-	u, _ := url.Parse("http://example.com?name=alice")
-	value, ok := qp.GetString(u, "name")
-	if ok {
-	    fmt.Println("Parsed string:", value)
-	} else {
-	    fmt.Println("Failed to parse string")
-	}
-
-Pull a single string query parameter:
-
-	u, _ := url.Parse("http://example.com?name=alice")
-	name := qp.PullString(u, "name")
-	if name != nil {
-	    fmt.Println("Parsed string:", *name)
-	} else {
-	    fmt.Println("Key 'name' is absent")
-	}
-
-Parse a slice of string query parameters:
-
-	u, _ := url.Parse("http://example.com?names=alice,bob,charlie")
-	result := qp.ParseStringSlice(u, "names")
-	if result.Contains && !result.Empty && result.Error == nil {
-	    fmt.Println("Parsed strings:", result.Value)
-	} else {
-	    fmt.Println("Is empty:", result.Empty)
-	    fmt.Println("Is present:", result.Contains)
-	    fmt.Println("Failed to parse strings:", result.Error)
-	}
-
-Get a slice of string query parameters:
-
-	u, _ := url.Parse("http://example.com?names=alice,bob,charlie")
-	ids, ok := qp.GetStringSlice(u, "names")
-	if ok {
-	    fmt.Println("Parsed strings:", ids)
-	} else {
-	    fmt.Println("Failed to parse strings")
-	}
-
-Pull a slice of string query parameters:
-
-	u, _ := url.Parse("http://example.com?names=alice,bob,charlie")
-	ids := qp.PullStringSlice(u, "names")
-	if ids != nil {
-	    fmt.Println("Parsed strings:", ids)
-	} else {
-	    fmt.Println("Key 'names' is absent")
-	}
-
-# Parsing Boolean Query Parameters
-
-Parse a single boolean query parameter:
-
-	u, _ := url.Parse("http://example.com?active=true")
-	result := qp.ParseBool(u, "active")
-	if result.Contains && !result.Empty && result.Error == nil {
-	    fmt.Println("Parsed boolean:", result.Value)
-	} else {
-	    fmt.Println("Is empty:", result.Empty)
-	    fmt.Println("Is present:", result.Contains)
-	    fmt.Println("Failed to parse boolean:", result.Error)
-	}
-
-Get a single boolean query parameter:
-
-	u, _ := url.Parse("http://example.com?active=true")
-	value, ok := qp.GetBool(u, "active")
-	if ok {
-	    fmt.Println("Parsed boolean:", value)
-	} else {
-	    fmt.Println("Default value:", value)
-	}
-
-Pull a single boolean query parameter:
-
-	u, _ := url.Parse("http://example.com?active=true")
-	active := qp.PullBool(u, "active")
-	if active != nil {
-	    fmt.Println("Parsed boolean:", *active)
-	} else {
-	    fmt.Println("Key 'active' is absent")
-	}
-
-Parse a slice of boolean query parameters:
-
-	u, _ := url.Parse("http://example.com?flags=true,false,yes,no")
-	result := qp.ParseBoolSlice(u, "flags")
-	if result.Contains && !result.Empty && result.Error == nil {
-	    fmt.Println("Parsed booleans:", result.Value)
-	} else {
-	    fmt.Println("Is empty:", result.Empty)
-	    fmt.Println("Is present:", result.Contains)
-	    fmt.Println("Failed to parse booleans:", result.Error)
-	}
-
-Get a slice of boolean query parameters:
-
-	u, _ := url.Parse("http://example.com?flags=true,false,yes,no")
-	ids, ok := qp.GetBoolSlice(u, "flags")
-	if ok {
-	    fmt.Println("Parsed booleans:", ids)
-	} else {
-	    fmt.Println("Default value:", ids)
-	}
-
-Pull a slice of boolean query parameters:
-
-	u, _ := url.Parse("http://example.com?flags=true,false,yes,no")
-	ids := qp.PullBoolSlice(u, "flags")
-	if ids != nil {
-	    fmt.Println("Parsed booleans:", ids)
-	} else {
-	    fmt.Println("Key 'flags' is absent")
-	}
-
-# Checking for Presence and Emptiness of Query Parameters
-
-Check if a query parameter is present:
-
-	u, _ := url.Parse("http://example.com?age=18")
-	if qp.Contains(u, "age") {
-	    fmt.Println("Query parameter 'age' is present")
-	} else {
-	    fmt.Println("Query parameter 'age' is absent")
-	}
-
-Check if a query parameter is empty:
-
-	u, _ := url.Parse("http://example.com?age=")
-	if qp.Empty(u, "age") {
-	    fmt.Println("Query parameter 'age' is empty")
-	} else {
-	    fmt.Println("Query parameter 'age' is not empty")
-	}
-*/
+// Package qp provides utilities for parsing query parameters from URLs.
+//
+// The package offers robust and user-friendly functions for parsing query
+// parameters into various types (integers, floats, strings, booleans) and their
+// slice variants. Each parsing function returns detailed results including the
+// parsed value, validation status, and error information if any.
+//
+// # Types of Methods
+//
+// The package provides three types of methods for each data type:
+//
+//   - Parse methods: Return detailed results in a Result structure, including
+//     technical data such as errors, presence flags, and parsed values.
+//
+//   - Get methods: Return a value and a boolean indicating validity. The value
+//     is never nil (even for slices), and the boolean is true only if the
+//     parameter exists and was parsed correctly.
+//
+//   - Pull methods: Return a pointer that is nil if the parameter is absent,
+//     points to the default value if the parameter is present but invalid,
+//     or points to the parsed value if successful.
+//
+// # Result Structure
+//
+//	type Result[T Value] struct {
+//	    Key      string // Parameter name
+//	    Value    T      // Parsed value
+//	    Default  T      // Default value
+//	    Min      T      // Minimum value (for numeric types)
+//	    Max      T      // Maximum value (for numeric types)
+//	    Others   []T    // Additional valid values
+//	    Empty    bool   // True if parameter is empty
+//	    Contains bool   // True if parameter exists
+//	    Error    error  // Parsing error, if any
+//	}
+//
+// # Examples
+//
+// Using Pull methods with SQL WHERE clause generation:
+//
+//	func where(isActive, isStaff, isSuperuser *bool) string {
+//	    check := [...]struct {
+//	        name  string
+//	        value *bool
+//	    }{
+//	        {name: "is_active", value: isActive},
+//	        {name: "is_staff", value: isStaff},
+//	        {name: "is_superuser", value: isSuperuser},
+//	    }
+//
+//	    and := make([]string, 0, len(check))
+//	    for _, m := range check {
+//	        if m.value != nil {
+//	            and = append(and, fmt.Sprintf("%s=%t", m.name, *m.value))
+//	        }
+//	    }
+//
+//	    if len(and) != 0 {
+//	        return "WHERE " + strings.Join(and, ", ")
+//	    }
+//
+//	    return ""
+//	}
+//
+//	u, _ := url.Parse("http://example.com?is_active=true&is_staff=false")
+//	isActive := qp.PullBool(u, "is_active")
+//	isStaff := qp.PullBool(u, "is_staff")
+//	isSuperuser := qp.PullBool(u, "is_superuser") // nil
+//	query := where(isActive, isStaff, isSuperuser)
+//	// Result: WHERE is_active=true, is_staff=false
+//
+// # Integer Parsing
+//
+// Parse a single integer:
+//
+//	u, _ := url.Parse("http://example.com?age=18")
+//
+//	// Using Parse method
+//	result := qp.ParseInt(u, "age")
+//	if result.Contains && !result.Empty && result.Error == nil {
+//	    fmt.Println("Age:", result.Value)
+//	}
+//
+//	// Using Get method
+//	value, ok := qp.GetInt(u, "age")
+//
+//	// Using Pull method
+//	age := qp.PullInt(u, "age")
+//
+// Parse integer slice:
+//
+//	u, _ := url.Parse("http://example.com?ids=1,2,3")
+//	result := qp.ParseIntSlice(u, "ids")
+//	ids, ok := qp.GetIntSlice(u, "ids")
+//	ids = qp.PullIntSlice(u, "ids")
+//
+// # Float Parsing
+//
+// Parse a single float:
+//
+//	u, _ := url.Parse("http://example.com?temperature=36.6")
+//
+//	// Using Parse method
+//	result := qp.ParseFloat(u, "temperature")
+//	if result.Contains && !result.Empty && result.Error == nil {
+//	    fmt.Println("Temperature:", result.Value)
+//	}
+//
+//	// Using Get method
+//	value, ok := qp.GetFloat(u, "temperature")
+//
+//	// Using Pull method
+//	temp := qp.PullFloat(u, "temperature")
+//
+// Parse float slice:
+//
+//	u, _ := url.Parse("http://example.com?temps=36.6,37.2,36.9")
+//	result := qp.ParseFloatSlice(u, "temps")
+//	temps, ok := qp.GetFloatSlice(u, "temps")
+//	temps = qp.PullFloatSlice(u, "temps")
+//
+// # String Parsing
+//
+// Parse a single string:
+//
+//	u, _ := url.Parse("http://example.com?name=alice")
+//
+//	// Using Parse method
+//	result := qp.ParseString(u, "name")
+//	if result.Contains && !result.Empty && result.Error == nil {
+//	    fmt.Println("Name:", result.Value)
+//	}
+//
+//	// Using Get method
+//	value, ok := qp.GetString(u, "name")
+//
+//	// Using Pull method
+//	name := qp.PullString(u, "name")
+//
+// Parse string slice:
+//
+//	u, _ := url.Parse("http://example.com?names=alice,bob,charlie")
+//	result := qp.ParseStringSlice(u, "names")
+//	names, ok := qp.GetStringSlice(u, "names")
+//	names = qp.PullStringSlice(u, "names")
+//
+// # Boolean Parsing
+//
+// Parse a single boolean:
+//
+//	u, _ := url.Parse("http://example.com?active=true")
+//
+//	// Using Parse method
+//	result := qp.ParseBool(u, "active")
+//	if result.Contains && !result.Empty && result.Error == nil {
+//	    fmt.Println("Active:", result.Value)
+//	}
+//
+//	// Using Get method
+//	value, ok := qp.GetBool(u, "active")
+//
+//	// Using Pull method
+//	active := qp.PullBool(u, "active")
+//
+// Parse boolean slice:
+//
+//	u, _ := url.Parse("http://example.com?flags=true,false,yes,no")
+//	result := qp.ParseBoolSlice(u, "flags")
+//	flags, ok := qp.GetBoolSlice(u, "flags")
+//	flags = qp.PullBoolSlice(u, "flags")
+//
+// # Utility Functions
+//
+// Check parameter presence:
+//
+//	u, _ := url.Parse("http://example.com?age=18")
+//	if qp.Contains(u, "age") {
+//	    fmt.Println("Age parameter exists")
+//	}
+//
+// Check if parameter is empty:
+//
+//	u, _ := url.Parse("http://example.com?age=")
+//	if qp.Empty(u, "age") {
+//	    fmt.Println("Age parameter is empty")
+//	}
+//
+// # Notes
+//
+//   - Boolean parsing supports multiple formats: true/false, yes/no, on/off, 1/0
+//   - Slice parameters can be specified either as comma-separated values
+//     (?ids=1,2,3) or as multiple parameters (?ids=1&ids=2&ids=3)
+//   - All numeric parsers support range validation and additional valid values
+//   - String parsers support validation against a list of valid values
 package qp
