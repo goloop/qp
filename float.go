@@ -1,395 +1,138 @@
 package qp
 
-import (
-	"fmt"
-	"net/url"
-	"strconv"
-	"strings"
+import "net/url"
 
-	"github.com/goloop/g"
-)
-
-// ParseFloat parses a float query parameter from the given URL.
+// ParseFloat reads a float64 parameter and returns the full Result. Value holds
+// the parsed number, or the default when the parameter is absent, empty, or
+// rejected by validation; Error is set only when a present, non-empty value
+// fails to parse or violates a Min/Max/Between/OneOf constraint.
 //
-// The function accepts a URL, a key, and an optional list of floats.
-// The optional floats can specify a default value, a range (min and max),
-// and additional valid values.
+// Example usage:
 //
-// If no optional floats are provided, the function simply attempts to
-// parse the float value from the query parameter. If the query parameter
-// is absent or empty, the default value (zero) is returned.
-//
-// If one float is provided, it is used as the default value. If the
-// query parameter is absent or empty, this default value is returned.
-//
-// If two floats are provided, they specify a range (min and max), where
-// the first float is the default value. If the query parameter value
-// is outside this range, the default value is returned.
-//
-// If more than two floats are provided, the first two floats specify
-// the default value and the range (min and max), and any additional
-// floats are treated as additional valid values. If the query parameter
-// value is not within the range or among the additional valid values,
-// the default value is returned.
-//
-// Example Usage:
-//
-//	// Simple call without default, min, max, or others.
-//	result := ParseFloat(u, "temperature")
-//
-//	// Call with default value.
-//	// Default: 18.5
-//	result := ParseFloat(u, "temperature", 18.5)
-//
-//	// Call with default and min-max.
-//	// Default: 18.5
-//	// Range:   18.5-30.0
-//	result := ParseFloat(u, "temperature", 18.5, 30.0)
-//
-//	// Call with default and max-min (reversed order).
-//	// Default: 30.0
-//	// Range:   18.5-30.0
-//	result := ParseFloat(u, "temperature", 30.0, 18.5)
-//
-//	// Call with default, min-max, and additional valid values.
-//	// Default:    18.5
-//	// Range:      18.5-30.0
-//	// Additional: 20.0, 25.0, 30.0
-//	result := ParseFloat(u, "temperature", 18.5, 30.0, 20.0, 25.0, 35.0)
-//
-//	// Call with default and additional valid values without min-max.
-//	// Default:    10.5
-//	// Additional: 10.5, 20.0, 30.0
-//	result := ParseFloat(u, "temperature", 10.5, 10.5, 20.0, 30.0)
-func ParseFloat(u *url.URL, key string, opt ...float64) *Result[float64] {
-	result := &Result[float64]{Key: key, Contains: true}
-	data, ok := u.Query()[key]
-
-	// Available values.
-	if len(opt) == 1 {
-		// Default value.
-		result.Default = opt[0]
-		result.Value = result.Default
-	} else if len(opt) > 1 {
-		// Range and default value.
-		min, max := opt[0], opt[1]
-		if min > max {
-			min, max = max, min
-		}
-
-		result.Min = min
-		result.Max = max
-		result.Default = opt[0] // not min or max, but first value
-		result.Value = result.Default
-
-		// Set additional valid values.
-		if len(opt) > 2 {
-			result.Others = make([]float64, 0, len(opt)-2)
-			result.Others = append(result.Others, opt[2:]...)
-		}
-	}
-
-	// Check if the query parameter is empty or missing.
-	if !ok {
-		// The query parameter is missing.
-		result.Empty = true
-		result.Contains = false
-		return result
-	} else if data[0] == "" {
-		// The query parameter is empty.
-		result.Empty = true
-		result.Contains = true
-		return result
-	}
-
-	// Convert the result to a float.
-	value, err := strconv.ParseFloat(data[0], 64)
-	if err != nil {
-		result.Error = fmt.Errorf("invalid value for key %s: %s", key, data[0])
-		return result
-	}
-
-	if len(opt) < 2 {
-		// No range or any available values.
-		result.Value = value
-	} else if value >= result.Min && value <= result.Max {
-		// Check if the value is within the specified range.
-		result.Value = value
-	} else {
-		// Check if the value is in the list of available values.
-		if result.Others != nil && g.In(value, result.Others...) {
-			result.Value = value
-		} else {
-			msg := "value out of range for key %s: %f"
-			result.Error = fmt.Errorf(msg, key, value)
-		}
-	}
-
-	return result
+//	r := q.ParseFloat("temperature", qp.Between(36.0, 42.0))
+func (q *Query) ParseFloat(key string, opts ...Option[float64]) *Result[float64] {
+	return getScalar(q.values, key, parseFloat, opts)
 }
 
-// GetFloat is the function to parse a float query parameter and return
-// the value and a boolean indicating if the value is valid.
+// Float reads a float64 parameter and returns its value, falling back to the
+// default (zero unless Default is given) when the parameter is absent, empty,
+// or invalid.
 //
-// The function accepts a URL, a key, and an optional list of floats.
-// The optional floats can specify a default value, a range (min and max),
-// and additional valid values.
+// Example usage:
 //
-// If no optional floats are provided, the function simply attempts to
-// parse the float value from the query parameter. If the query parameter
-// is absent or empty, the default value (zero) is returned.
-//
-// If one float is provided, it is used as the default value. If the
-// query parameter is absent or empty, this default value is returned.
-//
-// If two floats are provided, they specify a range (min and max), where
-// the first float is the default value. If the query parameter value
-// is outside this range, the default value is returned.
-//
-// If more than two floats are provided, the first two floats specify
-// the default value and the range (min and max), and any additional
-// floats are treated as additional valid values. If the query parameter
-// value is not within the range or among the additional valid values,
-// the default value is returned.
-//
-// Example Usage:
-//
-//	// Simple call without default, min, max, or others.
-//	result, ok := GetFloat(u, "temperature")
-//
-//	// Call with default value.
-//	// Default: 18.5
-//	result, ok := GetFloat(u, "temperature", 18.5)
-//
-//	// Call with default and min-max.
-//	// Default: 18.5
-//	// Range:   18.5-30.0
-//	result, ok := GetFloat(u, "temperature", 18.5, 30.0)
-//
-//	// Call with default and max-min (reversed order).
-//	// Default: 30.0
-//	// Range:   18.5-30.0
-//	result, ok := GetFloat(u, "temperature", 30.0, 18.5)
-//
-//	// Call with default, min-max, and additional valid values.
-//	// Default:    18.5
-//	// Range:      18.5-30.0
-//	// Additional: 20.0, 25.0, 30.0
-//	result, ok := GetFloat(u, "temperature", 18.5, 30.0, 20.0, 25.0, 35.0)
-//
-//	// Call with default and additional valid values without min-max.
-//	// Default:    10.5
-//	// Additional: 10.5, 20.0, 30.0
-//	result, ok := GetFloat(u, "temperature", 10.5, 10.5, 20.0, 30.0)
-func GetFloat(u *url.URL, key string, opt ...float64) (float64, bool) {
-	data := ParseFloat(u, key, opt...)
-	return data.Value, data.Contains && !data.Empty && data.Error == nil
+//	ratio := q.Float("ratio", qp.Default(1.0), qp.Between(0, 1))
+func (q *Query) Float(key string, opts ...Option[float64]) float64 {
+	return q.ParseFloat(key, opts...).Value
 }
 
-// PullFloat returns a pointer to the parsed float64 query parameter value.
-//
-// The function accepts a URL, a key, and an optional list of floats.
-// The optional floats can specify a default value, a range (min and max),
-// and additional valid values.
-//
-// If no optional floats are provided, the function simply attempts to
-// parse the integer value from the query parameter. If the query parameter
-// is absent, nil is returned.
-//
-// If one integer is provided, it is used as the default value. If the
-// query parameter is absent or empty, this default value is returned
-// as a pointer.
-//
-// If two floats are provided, they specify a range (min and max), where
-// the first integer is the default value. If the query parameter value
-// is outside this range, the default value is returned as a pointer.
-//
-// If more than two floats are provided, the first two floats specify
-// the default value and the range (min and max), and any additional
-// floats are treated as additional valid values. If the query parameter
-// value is not within the range or among the additional valid values,
-// the default value is returned as a pointer.
-//
-// Example Usage:
-//
-//	// Simple call without default, min, max, or others.
-//	result := PullFloat(u, "age")
-//
-//	// Call with default value.
-//	// Default: 18.0
-//	result := PullFloat(u, "age", 18.0)
-//
-//	// Call with default and min-max.
-//	// Default: 18.0
-//	// Range:   18.0-30.0
-//	result := PullFloat(u, "age", 18.0, 30.0)
-//
-//	// Call with default and max-min (reversed order).
-//	// Default: 30.0
-//	// Range:   18.0-30.0
-//	result := PullFloat(u, "age", 30.0, 18.0)
-//
-//	// Call with default, min-max, and additional valid values.
-//	// Default:    18.0
-//	// Range:      18.0-30.0
-//	// Additional: 20.0, 25.0, 30.0
-//	result := PullFloat(u, "age", 18.0, 30.0, 20.0, 25.0, 35.0)
-//
-//	// Call with default and additional valid values without min-max.
-//	// Default:    10.0
-//	// Additional: 10.0, 20.0, 30.0
-//	result := PullFloat(u, "age", 10.0, 10.0, 20.0, 30.0)
-func PullFloat(u *url.URL, key string, opt ...float64) *float64 {
-	data := ParseFloat(u, key, opt...)
-	if !data.Contains {
+// GetFloat reads a float64 parameter and reports whether it was present,
+// non-empty, and valid. On failure the returned value is the default.
+func (q *Query) GetFloat(key string, opts ...Option[float64]) (float64, bool) {
+	r := q.ParseFloat(key, opts...)
+	return r.Value, ok(r)
+}
+
+// PullFloat reads a float64 parameter and returns a pointer to its value, or
+// nil when the parameter is absent. Use ParseFloat when the validation error
+// matters.
+func (q *Query) PullFloat(key string, opts ...Option[float64]) *float64 {
+	r := q.ParseFloat(key, opts...)
+	if !r.Contains {
 		return nil
 	}
 
-	return &data.Value
+	return &r.Value
 }
 
-// ParseFloatSlice parses a float64 slice query parameter from the given URL.
-//
-// The function accepts a URL and a key. If the query parameter is absent,
-// nil is returned. If the query parameter is present but empty, an empty
-// slice is returned.
-//
-// The function supports query parameters specified as a single string
-// (e.g., "?values=1.1,2.2,3.3") or as multiple values (e.g.,
-// "?values=1.1&values=2.2&values=3.3").
-//
-// Example Usage:
-//
-//	// Simple call.
-//	result := ParseFloatSlice(u, "values")
-//
-//	// Handling the result.
-//	if result.Contains && !result.Empty && result.Error == nil {
-//	    fmt.Println("Parsed floats:", result.Value)
-//	} else if result.Empty {
-//	    fmt.Println("Query parameter is empty.")
-//	} else if result.Error != nil {
-//	    fmt.Println("Error parsing query parameter:", result.Error)
-//	} else {
-//	    fmt.Println("Query parameter is absent.")
-//	}
+// ParseFloatSlice reads a float64 slice parameter and returns the full Result.
+// Both "?xs=1.1,2.2" and "?xs=1.1&xs=2.2" are accepted; a single unparseable or
+// invalid element rejects the whole slice.
+func (q *Query) ParseFloatSlice(
+	key string,
+	opts ...SliceOption[float64],
+) *Result[[]float64] {
+	return getSlice(q.values, key, parseFloat, opts)
+}
+
+// FloatSlice reads a float64 slice parameter and returns its values, falling
+// back to the fallback (an empty slice unless Fallback is given) when the
+// parameter is absent, empty, or invalid.
+func (q *Query) FloatSlice(key string, opts ...SliceOption[float64]) []float64 {
+	return q.ParseFloatSlice(key, opts...).Value
+}
+
+// GetFloatSlice reads a float64 slice parameter and reports whether it was
+// present, non-empty, and valid.
+func (q *Query) GetFloatSlice(
+	key string,
+	opts ...SliceOption[float64],
+) ([]float64, bool) {
+	r := q.ParseFloatSlice(key, opts...)
+	return r.Value, ok(r)
+}
+
+// PullFloatSlice reads a float64 slice parameter and returns its values, or nil
+// when the parameter is absent (even if a fallback is configured).
+func (q *Query) PullFloatSlice(
+	key string,
+	opts ...SliceOption[float64],
+) []float64 {
+	r := q.ParseFloatSlice(key, opts...)
+	if !r.Contains {
+		return nil
+	}
+
+	return r.Value
+}
+
+// ParseFloat is a one-shot convenience for New(u).ParseFloat(key, opts...).
+func ParseFloat(u *url.URL, key string, opts ...Option[float64]) *Result[float64] {
+	return New(u).ParseFloat(key, opts...)
+}
+
+// Float is a one-shot convenience for New(u).Float(key, opts...).
+func Float(u *url.URL, key string, opts ...Option[float64]) float64 {
+	return New(u).Float(key, opts...)
+}
+
+// GetFloat is a one-shot convenience for New(u).GetFloat(key, opts...).
+func GetFloat(u *url.URL, key string, opts ...Option[float64]) (float64, bool) {
+	return New(u).GetFloat(key, opts...)
+}
+
+// PullFloat is a one-shot convenience for New(u).PullFloat(key, opts...).
+func PullFloat(u *url.URL, key string, opts ...Option[float64]) *float64 {
+	return New(u).PullFloat(key, opts...)
+}
+
+// ParseFloatSlice is a one-shot convenience for New(u).ParseFloatSlice(...).
 func ParseFloatSlice(
 	u *url.URL,
 	key string,
-	opt ...[]float64,
+	opts ...SliceOption[float64],
 ) *Result[[]float64] {
-	result := &Result[[]float64]{Key: key, Contains: true}
-	data, ok := u.Query()[key]
-
-	// Default value.
-	result.Default = []float64{} // not nil
-	result.Value = result.Default
-	if len(opt) > 0 {
-		result.Default = opt[0]
-		result.Value = result.Default
-	}
-
-	// Check if the query parameter is empty or missing.
-	if !ok {
-		result.Empty = true
-		result.Contains = false
-		return result
-	} else if data[0] == "" {
-		result.Empty = true
-		result.Contains = true
-		return result
-	}
-
-	// An array can be specified as a single string "?values=1.1,2.2,3.3" or
-	// as multiple values "?values=1.1&values=2.2&values=3.3".
-	if len(data) > 1 {
-		// Multiple values.
-		result.Value = make([]float64, 0, len(data))
-		for _, str := range data {
-			value, err := strconv.ParseFloat(str, 64)
-			if err != nil {
-				msg := "invalid value for key %s: %s"
-				result.Error = fmt.Errorf(msg, key, str)
-				result.Value = []float64{} // not nil
-				return result
-			}
-			result.Value = append(result.Value, value)
-		}
-		return result
-	}
-
-	// Single value.
-	result.Value = make([]float64, 0)
-	for _, str := range strings.Split(data[0], ",") {
-		value, err := strconv.ParseFloat(str, 64)
-		if err != nil {
-			msg := "invalid value for key %s: %s"
-			result.Error = fmt.Errorf(msg, key, str)
-			result.Value = []float64{} // not nil
-			return result
-		}
-		result.Value = append(result.Value, value)
-	}
-
-	return result
+	return New(u).ParseFloatSlice(key, opts...)
 }
 
-// GetFloatSlice parses an float64 slice query parameter from the given URL
-// and returns the slice of values and a boolean indicating if the
-// value is valid.
-//
-// The function accepts a URL and a key. If the query parameter is absent,
-// nil is returned. If the query parameter is present but empty, an empty
-// slice is returned.
-//
-// The function supports query parameters specified as a single string
-// (e.g., "?ids=1,2,3") or as multiple values (e.g., "?ids=1&ids=2&ids=3").
-//
-// Example Usage:
-//
-//	// Simple call.
-//	result, ok := GetFloatSlice(u, "ids")
-//
-//	// Handling the result.
-//	if ok {
-//	    fmt.Println("Parsed floats:", result)
-//	} else {
-//	    fmt.Println("Query parameter is absent or invalid.")
-//	}
-//
-//	// Call with default value.
-//	// Default: []int{1, 2, 3}
-//	result, ok := GetFloatSlice(u, "ids", []int{1, 2, 3})
-func GetFloatSlice(u *url.URL, key string, opt ...[]float64) ([]float64, bool) {
-	data := ParseFloatSlice(u, key, opt...)
-	return data.Value, data.Contains && !data.Empty && data.Error == nil
+// FloatSlice is a one-shot convenience for New(u).FloatSlice(key, opts...).
+func FloatSlice(u *url.URL, key string, opts ...SliceOption[float64]) []float64 {
+	return New(u).FloatSlice(key, opts...)
 }
 
-// PullFloatSlice is a convenience function to parse a float64 slice query
-// parameter and return the slice of values.
-//
-// The function accepts a URL and a key. If the query parameter is absent,
-// nil is returned. If the query parameter is present but empty, an empty
-// slice is returned.
-//
-// Example Usage:
-//
-//	// Simple call.
-//	values := PullFloatSlice(u, "values")
-//
-//	// Handling the result.
-//	if values == nil {
-//	    fmt.Println("Query parameter is absent.")
-//	} else if len(values) == 0 {
-//	    fmt.Println("Query parameter is empty.")
-//	} else {
-//	    fmt.Println("Parsed floats:", values)
-//	}
-func PullFloatSlice(u *url.URL, key string, opt ...[]float64) []float64 {
-	data := ParseFloatSlice(u, key, opt...)
-	if !data.Contains {
-		return nil // not default
-	}
+// GetFloatSlice is a one-shot convenience for New(u).GetFloatSlice(...).
+func GetFloatSlice(
+	u *url.URL,
+	key string,
+	opts ...SliceOption[float64],
+) ([]float64, bool) {
+	return New(u).GetFloatSlice(key, opts...)
+}
 
-	return data.Value
+// PullFloatSlice is a one-shot convenience for New(u).PullFloatSlice(...).
+func PullFloatSlice(
+	u *url.URL,
+	key string,
+	opts ...SliceOption[float64],
+) []float64 {
+	return New(u).PullFloatSlice(key, opts...)
 }

@@ -1,81 +1,114 @@
 package qp
 
-import (
-	"net/url"
-	"strconv"
-	"strings"
-)
+import "net/url"
 
-// Value defines an interface for types supported by the query parsing
-// functions. It restricts type parameters to basic types and their slices
-// that can be parsed from query parameters in an HTTP request. This includes
-// integers, floating-point numbers, strings, and booleans, along with their
-// slice counterparts.
+// Result holds the outcome of parsing a single query parameter.
 //
-// This type constraint ensures that the parsing functions can safely operate
-// on the provided type parameters without runtime type errors, leveraging
-// Go's type safety features in a generic programming context.
+// Value is always safe to use: on a missing, empty, or invalid parameter it
+// equals the configured default (or the zero value of T when no default is
+// set). Error is non-nil only when the parameter was present and non-empty but
+// could not be parsed or failed validation — in that case Value still holds the
+// default, while Error explains why the input was rejected.
 //
-// Example types supported:
+// The combination of flags distinguishes every state:
 //
-//   - int, float64, string, bool
-//   - []int, []float64, []string, []bool
-type Value interface {
-	~int | ~float64 | ~string | ~bool |
-		~[]int | ~[]float64 | ~[]string | ~[]bool
-}
-
-// Result is a generic type to hold parsed query parameter values.
-type Result[T Value] struct {
+//	Contains  Empty  Error    meaning
+//	false     true   nil      parameter absent
+//	true      true   nil      parameter present but empty ("?k=")
+//	true      false  nil      parameter present and valid
+//	true      false  non-nil  parameter present but invalid (out of range,
+//	                          not in set, unparseable)
+type Result[T any] struct {
 	Key   string // the query parameter name
-	Value T      // the parsed query parameter value
+	Value T      // the parsed value, or the default if absent/empty/invalid
 
-	Default T   // the default value for the query parameter
-	Min     T   // the minimum value for the query parameter
-	Max     T   // the maximum value for the query parameter
-	Others  []T // additional valid values for the query parameter
+	Default T // the default value applied when the value is unusable
 
-	Empty    bool  // indicates if the query parameter is empty
-	Contains bool  // indicates if the query parameter is present
-	Error    error // the error encountered during parsing
+	Contains bool  // true if the parameter is present in the query
+	Empty    bool  // true if the parameter is absent or present with no value
+	Error    error // non-nil if a present, non-empty value was rejected
 }
 
-// Contains checks if a specified query parameter is present in the request.
-// It returns true if the parameter is present, regardless of whether it has
-// a value or not.
+// Query is an immutable view over the parameters of a URL query string. It
+// decodes the raw query exactly once at construction, so reading many
+// parameters from the same request costs a single parse instead of one parse
+// per call.
+//
+// A Query is safe for concurrent reads. The zero value is not usable; create
+// one with New or From.
+type Query struct {
+	values url.Values
+}
+
+// New builds a Query from the query string of u. It is nil-safe: New(nil)
+// returns a Query with no parameters rather than panicking, so handlers never
+// crash on a malformed request.
 //
 // Example usage:
 //
-//	if qp.Contains(r.URL, "id") {
-//	    fmt.Println("ID parameter is present")
-//	}
-func Contains(u *url.URL, key string) bool {
-	_, present := u.Query()[key]
-	return present
-}
-
-// Empty checks if a specified query parameter is present in the request and
-// has an empty value. It returns true if the parameter is present and has no
-// value.
-//
-// Example usage:
-//
-//	if qp.Empty(r.URL, "id") {
-//	    fmt.Println("ID parameter is empty")
-//	}
-func Empty(u *url.URL, key string) bool {
-	return u.Query().Get(key) == ""
-}
-
-// parseBoolValue parses a string and returns its boolean value if valid.
-func parseBoolValue(str string) (bool, error) {
-	raw := strings.ToLower(str)
-	switch raw {
-	case "1", "true", "yes", "on":
-		return true, nil
-	case "0", "false", "no", "off":
-		return false, nil
-	default:
-		return strconv.ParseBool(raw)
+//	q := qp.New(r.URL)
+//	page := q.Int("page", qp.Default(1), qp.Min(1))
+//	limit := q.Int("limit", qp.Default(20), qp.Between(1, 100))
+func New(u *url.URL) *Query {
+	if u == nil {
+		return &Query{values: url.Values{}}
 	}
+
+	return &Query{values: u.Query()}
+}
+
+// From builds a Query from an already-decoded url.Values. Use it when the
+// values are obtained elsewhere (for example r.Form) to avoid re-parsing. A nil
+// map yields a Query with no parameters.
+func From(v url.Values) *Query {
+	if v == nil {
+		return &Query{values: url.Values{}}
+	}
+
+	return &Query{values: v}
+}
+
+// Values returns the underlying decoded query parameters. The returned map is
+// shared with the Query; callers must not modify it.
+func (q *Query) Values() url.Values {
+	return q.values
+}
+
+// Contains reports whether the parameter is present in the query, regardless of
+// whether it carries a value.
+//
+// Example usage:
+//
+//	if q.Contains("id") {
+//	    // the "id" parameter was supplied (possibly as "?id=")
+//	}
+func (q *Query) Contains(key string) bool {
+	_, ok := q.values[key]
+	return ok
+}
+
+// Empty reports whether the parameter is present but carries no value (as in
+// "?id="). It returns false for an absent parameter; use Contains to tell the
+// two apart.
+//
+// Example usage:
+//
+//	if q.Empty("id") {
+//	    // "id" was supplied with an empty value
+//	}
+func (q *Query) Empty(key string) bool {
+	v, ok := q.values[key]
+	return ok && (len(v) == 0 || v[0] == "")
+}
+
+// Contains reports whether the parameter is present in u's query. It is a
+// one-shot convenience for New(u).Contains(key) and is nil-safe.
+func Contains(u *url.URL, key string) bool {
+	return New(u).Contains(key)
+}
+
+// Empty reports whether the parameter is present in u's query but carries no
+// value. It is a one-shot convenience for New(u).Empty(key) and is nil-safe.
+func Empty(u *url.URL, key string) bool {
+	return New(u).Empty(key)
 }

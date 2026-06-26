@@ -3,129 +3,137 @@
 
 # qp
 
-The **qp** package provides robust and user-friendly utilities for parsing query parameters from URLs in Go applications.
+The **qp** package reads URL query parameters into typed Go values — with
+optional defaulting and validation, and without panicking on malformed input.
+
+Instead of the manual `r.URL.Query().Get("age")` + `strconv.Atoi` +
+bounds-check dance, you read a parameter into the right type in one call.
 
 
 ## Installation
 
 ```sh
-go get github.com/goloop/qp
+go get github.com/goloop/qp/v2
+```
+
+```go
+import "github.com/goloop/qp/v2"
 ```
 
 ## Features
 
-- Parse query parameters into various types (int, float64, string, bool)
-- Support for slices of values
-- Range validation for numeric types
-- Value validation against allowed sets
-- Multiple boolean formats support (true/false, yes/no, on/off, 1/0)
-- Detailed error reporting
+- Read into `int`, `float64`, `string`, `bool`, and their slices
+- Defaulting and validation via composable options (range, allowed set)
+- Per-element validation for slices
+- Both `?ids=1,2,3` and `?ids=1&ids=2&ids=3` (and mixtures) handled the same way
+- Boolean forms: `true/false`, `yes/no`, `on/off`, `1/0` (case-insensitive)
+- Decodes the query string once per request via a holder
+- nil-safe: a `nil` URL never panics
 - Zero dependencies
 
-## Method Types
+## The Query holder
 
-The package provides three types of methods for each data type:
-
-1. **Parse methods** - Return detailed results in a Result structure:
-   - Technical data like errors and presence flags
-   - Parsed values with validation status
-   - Default values and constraints
-
-2. **Get methods** - Return value and validity boolean:
-   - Value is never nil (even for slices)
-   - Boolean is true only if parameter exists and parsed correctly
-
-3. **Pull methods** - Return pointer:
-   - nil if parameter is absent
-   - Points to default value if parameter present but invalid
-   - Points to parsed value if successful
-
-## Usage Examples
-
-### Boolean Parsing
+A query string is rarely read one parameter at a time, so the central type is a
+holder that decodes the raw query once and serves every read from it:
 
 ```go
-// Parse single boolean.
-u, _ := url.Parse("http://example.com?active=true")
+q := qp.New(r.URL) // nil-safe; decodes r.URL.Query() exactly once
 
-// Using Parse method.
-result := qp.ParseBool(u, "active")
-if result.Contains && !result.Empty && result.Error == nil {
-    fmt.Println("Active:", result.Value)
-}
-
-// Using Get method.
-value, ok := qp.GetBool(u, "active")
-
-// Using Pull method.
-active := qp.PullBool(u, "active")
-
-// Parse boolean slice.
-u, _ := url.Parse("http://example.com?flags=true,false,yes,no")
-flags := qp.PullBoolSlice(u, "flags")
+page  := q.Int("page", qp.Default(1), qp.Min(1))
+limit := q.Int("limit", qp.Default(20), qp.Between(1, 100))
+sort  := q.String("sort", qp.Default("created_at"))
+tags  := q.StringSlice("tag")
 ```
 
-### Integer Parsing
+For a single read there are top-level shortcuts that build a throwaway holder:
 
 ```go
-// Parse single integer.
-u, _ := url.Parse("http://example.com?age=25")
-
-// Basic parsing.
-age := qp.PullInt(u, "age")
-
-// With default value.
-age := qp.ParseInt(u, "age", 18)
-
-// With range validation.
-age := qp.ParseInt(u, "age", 18, 65) // default: 18, range: 18-65
-
-// With additional valid values.
-age := qp.ParseInt(u, "age", 18, 65, 16, 70) // allows 16 and 70 besides range
-
-// Parse integer slice.
-u, _ := url.Parse("http://example.com?ids=1,2,3")
-ids := qp.PullIntSlice(u, "ids")
+age, ok := qp.GetInt(r.URL, "age", qp.Between(18, 65))
 ```
 
-### Float Parsing
+## Four method families
+
+Every type (and its slice form) offers four ways to read a parameter, differing
+only in the return shape:
+
+| Family | Example | Returns |
+|--------|---------|---------|
+| Bare   | `q.Int("age", qp.Default(18))` | the value (default on absent/invalid) |
+| Get    | `q.GetInt("age")`              | `(value, ok)` |
+| Pull   | `q.PullInt("age")`             | `*value` (nil if absent) |
+| Parse  | `q.ParseInt("age")`            | full `*Result` with flags and error |
+
+## Options
+
+Scalar options:
 
 ```go
-// Parse single float.
-u, _ := url.Parse("http://example.com?temperature=36.6")
-
-// Basic parsing.
-temp := qp.PullFloat(u, "temperature")
-
-// With range validation.
-temp := qp.ParseFloat(u, "temperature", 36.0, 42.0)
-
-// Parse float slice.
-u, _ := url.Parse("http://example.com?temps=36.6,37.2,36.9")
-temps := qp.PullFloatSlice(u, "temps")
+qp.Default(v)        // value used when absent, empty, or invalid
+qp.Min(v)            // open-ended lower bound
+qp.Max(v)            // open-ended upper bound
+qp.Between(lo, hi)   // inclusive range, bounds auto-swapped
+qp.OneOf(a, b, c)    // allowed set (the way to validate strings)
 ```
 
-### String Parsing
+Slice options:
 
 ```go
-// Parse single string.
-u, _ := url.Parse("http://example.com?name=alice")
-
-// Basic parsing.
-name := qp.PullString(u, "name")
-
-// With default value.
-name := qp.ParseString(u, "name", "guest")
-
-// With valid values validation.
-role := qp.ParseString(u, "role", "guest", "admin", "user")
-
-// Parse string slice.
-u, _ := url.Parse("http://example.com?names=alice,bob,charlie")
-names := qp.PullStringSlice(u, "names")
+qp.Each(opts...)     // apply scalar validation to every element
+qp.Sep(";")          // custom separator (default ",")
+qp.Fallback(v)       // default slice when absent, empty, or invalid
+qp.KeepEmpty()       // keep empty elements instead of dropping them
+qp.ErrorOnEmpty()    // reject the slice on any empty element
 ```
 
-### Practical Example: SQL WHERE Clause
+## Validation contract
+
+`Value` is always safe to use. When a present, non-empty parameter fails to
+parse or violates a constraint, `Value` falls back to the default and `Error`
+explains why — the failure is reported, never silently masked:
+
+```go
+r := qp.ParseInt(u, "age", qp.Default(18), qp.Between(18, 65))
+// "?age=99": r.Value == 18, r.Error != nil
+// GetInt would return (18, false); PullInt a pointer to 18.
+```
+
+## Slices
+
+Slice parameters accept the comma form, the repeated form, and mixtures of the
+two, all normalised the same way: every value is split by the separator, each
+element is trimmed, and empty elements are dropped by default. A single invalid
+element rejects the whole slice.
+
+```go
+u, _ := url.Parse("http://example.com?ids=1,2&ids=3")
+ids := qp.IntSlice(u, "ids", qp.Each(qp.Between(1, 100))) // [1 2 3]
+```
+
+## Examples
+
+### Reading typed values
+
+```go
+u, _ := url.Parse("http://example.com?age=25&temp=36.6&name=alice&active=true")
+q := qp.New(u)
+
+age    := q.Int("age", qp.Between(0, 120))
+temp   := q.Float("temp")
+name   := q.String("name", qp.Default("guest"))
+active := q.Bool("active")
+```
+
+### Validating against an allowed set
+
+```go
+role, ok := q.GetString("role", qp.Default("guest"), qp.OneOf("admin", "user"))
+// "?role=hacker" -> role == "guest", ok == false
+```
+
+### Optional SQL filters
+
+`Pull` methods make optional filters concise — a nil pointer means "not
+supplied", so only the parameters actually present enter the `WHERE` clause:
 
 ```go
 func where(isActive, isStaff, isSuperuser *bool) string {
@@ -152,36 +160,25 @@ func where(isActive, isStaff, isSuperuser *bool) string {
 }
 
 u, _ := url.Parse("http://example.com?is_active=true&is_staff=false")
-isActive := qp.PullBool(u, "is_active")
-isStaff := qp.PullBool(u, "is_staff")
-isSuperuser := qp.PullBool(u, "is_superuser") // nil
-query := where(isActive, isStaff, isSuperuser)
+q := qp.New(u)
+query := where(
+    q.PullBool("is_active"),
+    q.PullBool("is_staff"),
+    q.PullBool("is_superuser"), // nil
+)
 // Result: WHERE is_active=true, is_staff=false
 ```
 
-### Utility Functions
+### Presence checks
 
 ```go
-// Check parameter presence.
-if qp.Contains(u, "age") {
-    fmt.Println("Age parameter exists")
+if q.Contains("id") {
+    // "id" was supplied (possibly as "?id=")
 }
-
-// Check if parameter is empty.
-if qp.Empty(u, "age") {
-    fmt.Println("Age parameter is empty")
+if q.Empty("id") {
+    // "id" was supplied with an empty value
 }
 ```
-
-## Notes
-
-- Boolean parsing supports multiple formats: true/false, yes/no, on/off, 1/0
-- Slice parameters can be specified in two ways:
-  - Comma-separated: `?ids=1,2,3`
-  - Multiple parameters: `?ids=1&ids=2&ids=3`
-- Numeric parsers support range validation and additional valid values
-- String parsers support validation against a list of valid values
-
 
 ## Contributing
 

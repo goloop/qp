@@ -1,7 +1,3 @@
-module github.com/goloop/qp
+module github.com/goloop/qp/v2
 
-go 1.22.1
-
-require github.com/goloop/g v1.11.0
-
-require github.com/goloop/trit v1.7.1 // indirect
+go 1.24

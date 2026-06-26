@@ -1,301 +1,148 @@
 package qp
 
-import (
-	"fmt"
-	"net/url"
-	"strings"
+import "net/url"
 
-	"github.com/goloop/g"
-)
-
-// ParseString parses a string query parameter from the given URL.
+// ParseString reads a string parameter and returns the full Result. Value holds
+// the raw string, or the default when the parameter is absent, empty, or
+// rejected by validation; Error is set only when a present, non-empty value is
+// not in the allowed set given by OneOf.
 //
-// The function accepts a URL, a key, and an optional list of strings.
-// The optional strings can specify a default value and a list of valid values.
+// Example usage:
 //
-// If no optional strings are provided, the function simply attempts to
-// parse the string value from the query parameter. If the query parameter
-// is absent or empty, the default value (an empty string) is returned.
-//
-// If one string is provided, it is used as the default value. If the
-// query parameter is absent or empty, this default value is returned.
-//
-// If more than one string is provided, the first string is used as the
-// default value. Any additional strings specify valid values. If the
-// query parameter value is not among the valid values, the default
-// value is returned.
-//
-// Example Usage:
-//
-//	// Simple call without default value or valid values.
-//	result := ParseString(u, "name")
-//
-//	// Call with default value.
-//	// Default: "guest"
-//	result := ParseString(u, "name", "guest")
-//
-//	// Call with default value and valid values.
-//	// Default: "guest"
-//	// Valid values: "guest", "admin", "user"
-//	result := ParseString(u, "name", "guest", "admin", "user")
-func ParseString(u *url.URL, key string, opt ...string) *Result[string] {
-	result := &Result[string]{Key: key, Contains: true}
-	data, ok := u.Query()[key]
-
-	// Available values.
-	if len(opt) == 1 {
-		// Default value.
-		result.Default = opt[0]
-		result.Value = result.Default
-	} else if len(opt) > 1 {
-		result.Default = opt[0]
-		result.Value = result.Default
-
-		// Additional valid values.
-		// Default value is part of the valid values.
-		result.Others = make([]string, 0, len(opt))
-		result.Others = append(result.Others, opt...)
-	}
-
-	// Check if the query parameter is empty or missing.
-	if !ok {
-		// The query parameter is missing.
-		result.Empty = true
-		result.Contains = false
-		return result
-	} else if data[0] == "" {
-		// The query parameter is empty.
-		result.Empty = true
-		result.Contains = true
-		return result
-	}
-
-	// Check if the value is in the list of valid values.
-	value := data[0]
-	if len(opt) < 2 {
-		result.Value = value
-	} else {
-		if result.Others != nil && g.In(value, result.Others...) {
-			result.Value = value
-		} else {
-			msg := "value out of range for key %s: %d"
-			result.Error = fmt.Errorf(msg, key, value)
-		}
-	}
-
-	return result
+//	r := q.ParseString("role", qp.Default("guest"), qp.OneOf("admin", "user"))
+//	// "?role=hacker": r.Value == "guest", r.Error != nil
+func (q *Query) ParseString(key string, opts ...Option[string]) *Result[string] {
+	return getScalar(q.values, key, parseString, opts)
 }
 
-// GetString is the function to parse a string query parameter
-// and return the value and a boolean indicating if the value is valid.
+// String reads a string parameter and returns its value, falling back to the
+// default (empty string unless Default is given) when the parameter is absent,
+// empty, or invalid.
 //
-// The function accepts a URL, a key, and an optional list of strings.
-// The optional strings can specify a default value and a list of
-// valid values.
+// Example usage:
 //
-// If no optional strings are provided, the function simply attempts to
-// parse the string value from the query parameter. If the query parameter
-// is absent or empty, the default value (an empty string) is returned.
-//
-// If one string is provided, it is used as the default value. If the
-// query parameter is absent or empty, this default value is returned.
-//
-// If more than one string is provided, the first string is used as the
-// default value.
-// Any additional strings specify valid values. If the query parameter
-// value is not among the valid values, the default value is returned.
-//
-// Example Usage:
-//
-//	// Simple call without default value or valid values.
-//	result, ok := GetString(u, "name")
-//
-//	// Call with default value.
-//	// Default: "guest"
-//	result, ok := GetString(u, "name", "guest")
-//
-//	// Call with default value and valid values.
-//	// Default: "guest"
-//	// Valid values: "guest", "admin", "user"
-//	result, ok := GetString(u, "name", "guest", "admin", "user")
-func GetString(u *url.URL, key string, opt ...string) (string, bool) {
-	data := ParseString(u, key, opt...)
-	return data.Value, data.Contains && !data.Empty && data.Error == nil
+//	sort := q.String("sort", qp.Default("created_at"))
+func (q *Query) String(key string, opts ...Option[string]) string {
+	return q.ParseString(key, opts...).Value
 }
 
-// PullString returns a pointer to the parsed string query parameter value.
+// GetString reads a string parameter and reports whether it was present,
+// non-empty, and (if OneOf is given) allowed. On failure the returned value is
+// the default.
 //
-// The function accepts a URL, a key, and an optional list of strings.
-// The optional strings can specify a default value, a range (min and max),
-// and additional valid values.
+// Example usage:
 //
-// If no optional strings are provided, the function simply attempts to
-// parse the integer value from the query parameter. If the query parameter
-// is absent, nil is returned.
-//
-// If one integer is provided, it is used as the default value. If the
-// query parameter is absent or empty, this default value is returned
-// as a pointer.
-//
-// If two strings are provided, they specify a range (min and max), where
-// the first integer is the default value. If the query parameter value
-// is outside this range, the default value is returned as a pointer.
-//
-// If more than two strings are provided, the first two strings specify
-// the default value and the range (min and max), and any additional
-// strings are treated as additional valid values. If the query parameter
-// value is not within the range or among the additional valid values,
-// the default value is returned as a pointer.
-//
-// Example Usage:
-//
-//	// Simple call without default value or valid values.
-//	// Returns nil if key is absent.
-//	result := PullString(u, "name")
-//
-//	// Call with default value.
-//	// Default: "guest"
-//	// Returns nil if key is absent.
-//	result := PullString(u, "name", "guest")
-//
-//	// Call with default value and valid values.
-//	// Default: "guest"
-//	// Valid values: "guest", "admin", "user"
-//	// Returns nil if key is absent.
-//	result := PullString(u, "name", "guest", "admin", "user")
-func PullString(u *url.URL, key string, opt ...string) *string {
-	data := ParseString(u, key, opt...)
-	if !data.Contains {
+//	role, ok := q.GetString("role", qp.OneOf("admin", "user"))
+func (q *Query) GetString(key string, opts ...Option[string]) (string, bool) {
+	r := q.ParseString(key, opts...)
+	return r.Value, ok(r)
+}
+
+// PullString reads a string parameter and returns a pointer to its value, or
+// nil when the parameter is absent. Use ParseString when the validation error
+// matters.
+func (q *Query) PullString(key string, opts ...Option[string]) *string {
+	r := q.ParseString(key, opts...)
+	if !r.Contains {
 		return nil
 	}
 
-	return &data.Value
+	return &r.Value
 }
 
-// ParseStringSlice parses a string slice query parameter from the given URL.
+// ParseStringSlice reads a string slice parameter and returns the full Result.
+// Both "?names=a,b,c" and "?names=a&names=b&names=c" are accepted; with Each a
+// single disallowed element rejects the whole slice.
+func (q *Query) ParseStringSlice(
+	key string,
+	opts ...SliceOption[string],
+) *Result[[]string] {
+	return getSlice(q.values, key, parseString, opts)
+}
+
+// StringSlice reads a string slice parameter and returns its values, falling
+// back to the fallback (an empty slice unless Fallback is given) when the
+// parameter is absent, empty, or invalid.
 //
-// The function accepts a URL and a key. If the query parameter is absent,
-// nil is returned. If the query parameter is present but empty, an empty
-// slice is returned.
+// Example usage:
 //
-// The function supports query parameters specified as a single string
-// (e.g., "?names=alice,bob,charlie") or as multiple values (e.g.,
-// "?names=alice&names=bob&names=charlie").
-//
-// Example Usage:
-//
-//	// Simple call.
-//	result := ParseStringSlice(u, "names")
-//
-//	// Handling the result.
-//	if result.Contains && !result.Empty && result.Error == nil {
-//	    fmt.Println("Parsed strings:", result.Value)
-//	} else if result.Empty {
-//	    fmt.Println("Query parameter is empty.")
-//	} else if result.Error != nil {
-//	    fmt.Println("Error parsing query parameter:", result.Error)
-//	} else {
-//	    fmt.Println("Query parameter is absent.")
-//	}
+//	tags := q.StringSlice("tag")
+func (q *Query) StringSlice(key string, opts ...SliceOption[string]) []string {
+	return q.ParseStringSlice(key, opts...).Value
+}
+
+// GetStringSlice reads a string slice parameter and reports whether it was
+// present, non-empty, and valid.
+func (q *Query) GetStringSlice(
+	key string,
+	opts ...SliceOption[string],
+) ([]string, bool) {
+	r := q.ParseStringSlice(key, opts...)
+	return r.Value, ok(r)
+}
+
+// PullStringSlice reads a string slice parameter and returns its values, or nil
+// when the parameter is absent (even if a fallback is configured).
+func (q *Query) PullStringSlice(
+	key string,
+	opts ...SliceOption[string],
+) []string {
+	r := q.ParseStringSlice(key, opts...)
+	if !r.Contains {
+		return nil
+	}
+
+	return r.Value
+}
+
+// ParseString is a one-shot convenience for New(u).ParseString(key, opts...).
+func ParseString(u *url.URL, key string, opts ...Option[string]) *Result[string] {
+	return New(u).ParseString(key, opts...)
+}
+
+// String is a one-shot convenience for New(u).String(key, opts...).
+func String(u *url.URL, key string, opts ...Option[string]) string {
+	return New(u).String(key, opts...)
+}
+
+// GetString is a one-shot convenience for New(u).GetString(key, opts...).
+func GetString(u *url.URL, key string, opts ...Option[string]) (string, bool) {
+	return New(u).GetString(key, opts...)
+}
+
+// PullString is a one-shot convenience for New(u).PullString(key, opts...).
+func PullString(u *url.URL, key string, opts ...Option[string]) *string {
+	return New(u).PullString(key, opts...)
+}
+
+// ParseStringSlice is a one-shot convenience for New(u).ParseStringSlice(...).
 func ParseStringSlice(
 	u *url.URL,
 	key string,
-	opt ...[]string,
+	opts ...SliceOption[string],
 ) *Result[[]string] {
-	result := &Result[[]string]{Key: key, Contains: true}
-	data, ok := u.Query()[key]
-
-	// Default value.
-	result.Default = []string{} // not nil
-	result.Value = result.Default
-	if len(opt) > 0 {
-		result.Default = opt[0]
-		result.Value = result.Default
-	}
-
-	// Check if the query parameter is empty or missing.
-	if !ok {
-		result.Empty = true
-		result.Contains = false
-		return result
-	} else if data[0] == "" {
-		result.Empty = true
-		result.Contains = true
-		return result
-	}
-
-	// An array can be specified as a single string "?names=alice,bob,charlie"
-	// or as multiple values "?names=alice&names=bob&names=charlie".
-	if len(data) > 1 {
-		// Multiple values.
-		result.Value = make([]string, 0, len(data))
-		for _, str := range data {
-			result.Value = append(result.Value, str)
-		}
-		return result
-	}
-
-	// Single value.
-	result.Value = strings.Split(data[0], ",")
-	return result
+	return New(u).ParseStringSlice(key, opts...)
 }
 
-// GetStringSlice parses an string slice query parameter from the given URL
-// and returns the slice of values and a boolean indicating if the
-// value is valid.
-//
-// The function accepts a URL and a key. If the query parameter is absent,
-// nil is returned. If the query parameter is present but empty, an empty
-// slice is returned.
-//
-// The function supports query parameters specified as a single string
-// (e.g., "?ids=1,2,3") or as multiple values (e.g., "?ids=1&ids=2&ids=3").
-//
-// Example Usage:
-//
-//	// Simple call.
-//	result, ok := GetStringSlice(u, "ids")
-//
-//	// Handling the result.
-//	if ok {
-//	    fmt.Println("Parsed strings:", result)
-//	} else {
-//	    fmt.Println("Query parameter is absent or invalid.")
-//	}
-//
-//	// Call with default value.
-//	// Default: []int{1, 2, 3}
-//	result, ok := GetStringSlice(u, "ids", []int{1, 2, 3})
-func GetStringSlice(u *url.URL, key string, opt ...[]string) ([]string, bool) {
-	data := ParseStringSlice(u, key, opt...)
-	return data.Value, data.Contains && !data.Empty && data.Error == nil
+// StringSlice is a one-shot convenience for New(u).StringSlice(key, opts...).
+func StringSlice(u *url.URL, key string, opts ...SliceOption[string]) []string {
+	return New(u).StringSlice(key, opts...)
 }
 
-// PullStringSlice is a convenience function to parse a string slice query
-// parameter and return the slice of values.
-//
-// The function accepts a URL and a key. If the query parameter is absent,
-// nil is returned. If the query parameter is present but empty, an empty
-// slice is returned.
-//
-// Example Usage:
-//
-//	// Simple call.
-//	values := PullStringSlice(u, "names")
-//
-//	// Handling the result.
-//	if values == nil {
-//	    fmt.Println("Query parameter is absent.")
-//	} else if len(values) == 0 {
-//	    fmt.Println("Query parameter is empty.")
-//	} else {
-//	    fmt.Println("Parsed strings:", values)
-//	}
-func PullStringSlice(u *url.URL, key string, opt ...[]string) []string {
-	data := ParseStringSlice(u, key, opt...)
-	if !data.Contains {
-		return nil // not default
-	}
+// GetStringSlice is a one-shot convenience for New(u).GetStringSlice(...).
+func GetStringSlice(
+	u *url.URL,
+	key string,
+	opts ...SliceOption[string],
+) ([]string, bool) {
+	return New(u).GetStringSlice(key, opts...)
+}
 
-	return data.Value
+// PullStringSlice is a one-shot convenience for New(u).PullStringSlice(...).
+func PullStringSlice(
+	u *url.URL,
+	key string,
+	opts ...SliceOption[string],
+) []string {
+	return New(u).PullStringSlice(key, opts...)
 }
