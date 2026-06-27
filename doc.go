@@ -45,6 +45,10 @@
 //	qp.Between(lo, hi)   // inclusive range, bounds auto-swapped
 //	qp.OneOf(a, b, c)    // allowed set (the way to validate strings)
 //
+// An option's type is inferred from its argument, so it must match the reader.
+// With a float reader, use float literals — qp.Float("x", qp.Between(0.0, 1.0)),
+// not qp.Between(0, 1) (which infers int) — or write qp.Between[float64](0, 1).
+//
 // Slice options:
 //
 //	qp.Each(opts...)     // apply scalar validation to every element
