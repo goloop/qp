@@ -1,4 +1,4 @@
-[![Go Report Card](https://goreportcard.com/badge/github.com/goloop/qp)](https://goreportcard.com/report/github.com/goloop/qp) [![License](https://img.shields.io/badge/license-MIT-brightgreen)](https://github.com/goloop/qp/blob/master/LICENSE) [![License](https://img.shields.io/badge/godoc-YES-green)](https://godoc.org/github.com/goloop/qp) [![Stay with Ukraine](https://img.shields.io/static/v1?label=Stay%20with&message=Ukraine%20♥&color=ffD700&labelColor=0057B8&style=flat)](https://u24.gov.ua/)
+[![Go Report Card](https://goreportcard.com/badge/github.com/goloop/qp/v2)](https://goreportcard.com/report/github.com/goloop/qp/v2) [![License](https://img.shields.io/badge/license-MIT-brightgreen)](https://github.com/goloop/qp/blob/master/LICENSE) [![Go Reference](https://pkg.go.dev/badge/github.com/goloop/qp/v2.svg)](https://pkg.go.dev/github.com/goloop/qp/v2) [![Stay with Ukraine](https://img.shields.io/static/v1?label=Stay%20with&message=Ukraine%20♥&color=ffD700&labelColor=0057B8&style=flat)](https://u24.gov.ua/)
 
 
 # qp
@@ -19,6 +19,44 @@ go get github.com/goloop/qp/v2
 ```go
 import "github.com/goloop/qp/v2"
 ```
+
+## Migrating from v1
+
+v2 is a redesign; v1 code does not compile unchanged. The two changes that touch
+most code:
+
+1. **Import path** — add `/v2`:
+
+   ```go
+   import "github.com/goloop/qp/v2" // was: github.com/goloop/qp
+   ```
+
+2. **Positional arguments become options** — the old "second argument means
+   range, the rest are extras" rule is replaced by explicit options:
+
+   | v1 | v2 |
+   |----|----|
+   | `qp.GetInt(u, "age", 18)` | `qp.GetInt(u, "age", qp.Default(18))` |
+   | `qp.GetInt(u, "age", 18, 65)` | `qp.GetInt(u, "age", qp.Default(18), qp.Between(18, 65))` |
+   | `qp.GetInt(u, "age", 18, 65, 16, 70)` | `qp.GetInt(u, "age", qp.Default(18), qp.Between(18, 65), qp.OneOf(16, 70))` |
+   | `qp.GetString(u, "role", "guest", "admin")` | `qp.GetString(u, "role", qp.Default("guest"), qp.OneOf("admin"))` |
+   | `qp.GetIntSlice(u, "ids", []int{1, 2})` | `qp.GetIntSlice(u, "ids", qp.Fallback([]int{1, 2}))` |
+
+Other behavioural changes to be aware of:
+
+- **`Result`** dropped the `Min`/`Max`/`Others` fields and the `Value` type
+  constraint — constraints now live in the options.
+- **`Empty`** now reports `true` only for a *present* empty value; an absent
+  parameter is `false` (use `Contains` to tell them apart).
+- **Out-of-range / disallowed** values set `Error` and fall back to the default;
+  `Get` returns `ok=false` (this was ambiguous in v1).
+- **Errors** are typed: match `ErrInvalid`/`ErrNotAllowed`/`ErrEmptyElement` with
+  `errors.Is`, or pull a `*ParseError` with `errors.As`.
+
+New in v2: the `Query` holder (`qp.New`), custom-type readers (`ParseAs`,
+`Duration`, `Time`), per-element slice validation (`Each`), and custom
+separators (`Sep`). Nothing was removed in capability — only the calling style
+changed.
 
 ## Features
 
