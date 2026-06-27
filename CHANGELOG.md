@@ -19,6 +19,11 @@ requires Go 1.24. The API changed; v1 code does not compile unchanged.
 - Bare reader family (`Int`, `String`, `IntSlice`, …) returning the value
   directly, alongside the `Get`, `Pull`, and `Parse` families.
 - Custom slice separators via `Sep`.
+- Custom-type readers: `ParseAs`/`GetAs`/`PullAs` and their slice variants take
+  a parse function for types beyond the built-in four.
+- Ready-made `Duration` and `Time` readers (with the usual four families).
+- Sentinel errors `ErrInvalid`, `ErrNotAllowed`, `ErrEmptyElement` and a
+  `*ParseError` (key + offending value) for `errors.Is`/`errors.As`.
 - Runnable examples and fuzz tests.
 
 ### Changed
@@ -31,6 +36,9 @@ requires Go 1.24. The API changed; v1 code does not compile unchanged.
   identically.
 - `Empty` now distinguishes an absent parameter from a present-but-empty one.
 - Boolean parsing reports a clear error for unrecognised input.
+- `Values()` now returns an independent copy, so mutating it cannot corrupt the
+  `Query`.
+- An explicitly empty `OneOf()` now rejects every value instead of accepting all.
 
 ### Fixed
 - Panic on a `nil` `*url.URL`.
@@ -38,6 +46,10 @@ requires Go 1.24. The API changed; v1 code does not compile unchanged.
 - Slice parsing failing on mixed comma/repeated forms and on surrounding
   whitespace.
 - Slices could not validate their elements.
+- A leading empty value in the repeated form (`?ids=&ids=5`) discarded the whole
+  parameter instead of keeping the non-empty values.
+- `Fallback` returned the caller's slice without copying, so mutating a result
+  could corrupt the fallback and other reads.
 
 ### Removed
 - The external dependency: the module is now dependency-free.

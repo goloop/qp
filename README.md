@@ -97,6 +97,30 @@ r := qp.ParseInt(u, "age", qp.Default(18), qp.Between(18, 65))
 // GetInt would return (18, false); PullInt a pointer to 18.
 ```
 
+Errors wrap sentinels (`ErrInvalid`, `ErrNotAllowed`, `ErrEmptyElement`) and a
+`*ParseError` with the key and offending value:
+
+```go
+if errors.Is(r.Error, qp.ErrNotAllowed) {
+    var pe *qp.ParseError
+    errors.As(r.Error, &pe) // pe.Key, pe.Value
+}
+```
+
+## Custom types
+
+For types beyond `int`/`float64`/`string`/`bool`, the `As` family takes a parse
+function; `Duration` and `Time` are ready-made:
+
+```go
+import "net/netip"
+
+addr, ok := qp.GetAs(q, "ip", netip.ParseAddr)
+
+ttl  := q.Duration("ttl", qp.Default(30*time.Second), qp.Max(time.Hour))
+from := q.Time("from", time.RFC3339)
+```
+
 ## Slices
 
 Slice parameters accept the comma form, the repeated form, and mixtures of the

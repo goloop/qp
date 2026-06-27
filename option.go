@@ -21,8 +21,11 @@ type config[T any] struct {
 	max     T
 
 	// Allowed set. eq is installed by OneOf (which requires a comparable T).
-	eq    func(a, b T) bool
-	oneOf []T
+	// hasOneOf records that OneOf was applied at all, so an explicitly empty set
+	// rejects everything instead of silently disabling validation.
+	eq       func(a, b T) bool
+	hasOneOf bool
+	oneOf    []T
 }
 
 // newConfig folds the given options into a config.
@@ -43,7 +46,7 @@ func newConfig[T any](opts []Option[T]) config[T] {
 // (the set acts as explicit exceptions to the range).
 func (c *config[T]) valid(v T) bool {
 	hasRange := c.hasMin || c.hasMax
-	hasSet := len(c.oneOf) > 0
+	hasSet := c.hasOneOf
 	if !hasRange && !hasSet {
 		return true
 	}
@@ -115,12 +118,17 @@ func Between[T cmp.Ordered](lo, hi T) Option[T] {
 	}
 }
 
-// OneOf restricts the value to the given set. When combined with a range, a
-// value in the set is accepted even if it falls outside the range, letting the
-// set name explicit exceptions. For strings this is the primary way to validate
-// against a list of allowed values.
+// OneOf restricts the value to the given set. When combined with a range the
+// two form a union: a value is accepted if it is within the range OR in the
+// set, so the set names explicit exceptions to the range. For strings this is
+// the primary way to validate against a list of allowed values.
+//
+// An explicitly empty OneOf() rejects every value (an empty allowed set means
+// "nothing is allowed", not "no constraint") — pass no OneOf option at all to
+// skip set validation.
 func OneOf[T comparable](vs ...T) Option[T] {
 	return func(c *config[T]) {
+		c.hasOneOf = true
 		c.oneOf = append(c.oneOf, vs...)
 		c.eq = func(a, b T) bool { return a == b }
 	}

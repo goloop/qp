@@ -3,6 +3,7 @@ package qp_test
 import (
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/goloop/qp/v2"
 )
@@ -73,4 +74,32 @@ func ExampleQuery_IntSlice() {
 	ids := qp.New(u).IntSlice("ids", qp.Each(qp.Between(1, 100)))
 	fmt.Println(ids)
 	// Output: [1 2 3]
+}
+
+// ExampleOneOf shows the union of a range and a set: a value is accepted if it
+// is within the range OR listed as an explicit exception.
+func ExampleOneOf() {
+	check := func(age string) bool {
+		u, _ := url.Parse("http://x/?age=" + age)
+		_, ok := qp.GetInt(u, "age", qp.Between(18, 65), qp.OneOf(16, 70))
+		return ok
+	}
+
+	fmt.Println(check("40")) // in range
+	fmt.Println(check("70")) // out of range but an allowed exception
+	fmt.Println(check("99")) // neither
+	// Output:
+	// true
+	// true
+	// false
+}
+
+// ExampleGetAs shows reading a type the package does not handle natively via a
+// caller-supplied parser — here time.Duration.
+func ExampleGetAs() {
+	u, _ := url.Parse("http://x/?ttl=1.5h")
+
+	ttl, ok := qp.GetAs(qp.New(u), "ttl", time.ParseDuration)
+	fmt.Println(ttl, ok)
+	// Output: 1h30m0s true
 }

@@ -2,6 +2,7 @@ package qp
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -21,28 +22,50 @@ func FuzzParseBool(f *testing.F) {
 	})
 }
 
-// FuzzParseIntSlice drives the slice engine with arbitrary raw values. Whatever
-// the input, the result must be self-consistent: a non-nil error implies an
-// empty value, and success implies every element survived parsing.
+// FuzzParseIntSlice drives the slice engine with two raw values of the same key
+// (the repeated form, which is where BUG-01 lived). Whatever the input, the
+// result must be self-consistent: a non-nil error implies an empty value, and a
+// successful parse must drop empty elements rather than lose surrounding data.
 func FuzzParseIntSlice(f *testing.F) {
-	for _, s := range []string{"1,2,3", " 1 , 2 ", "1,,2", "1,2,", "x", "", "9999999999999999999"} {
-		f.Add(s)
+	seeds := [][2]string{
+		{"1,2,3", ""}, {"", "5"}, {"", ""}, {" 1 , 2 ", "3"},
+		{"1,,2", "4"}, {"x", "1"}, {"9999999999999999999", "1"},
+	}
+	for _, s := range seeds {
+		f.Add(s[0], s[1])
 	}
 
-	f.Fuzz(func(t *testing.T, raw string) {
-		u := &url.URL{RawQuery: "ids=" + url.QueryEscape(raw)}
+	f.Fuzz(func(t *testing.T, a, b string) {
+		u := &url.URL{RawQuery: "ids=" + url.QueryEscape(a) + "&ids=" + url.QueryEscape(b)}
 		r := New(u).ParseIntSlice("ids")
 
 		if r.Error != nil && len(r.Value) != 0 {
 			t.Fatalf("error set but Value non-empty: %v / %v", r.Error, r.Value)
 		}
+		// A leading/trailing empty value must never wipe a parseable one: if
+		// exactly one of the two values is a single valid integer, it must
+		// appear in the result.
 		if r.Error == nil {
-			// Re-parsing the rendered values must reproduce the slice length.
-			for _, v := range r.Value {
-				_ = v // every element is a valid int by construction
+			if n, ok := loneInt(a, b); ok && (len(r.Value) != 1 || r.Value[0] != n) {
+				t.Fatalf("lone value %d lost: a=%q b=%q -> %v", n, a, b, r.Value)
 			}
 		}
 	})
+}
+
+// loneInt returns the single integer value when exactly one of a/b is a bare
+// integer and the other is empty/blank, matching the BUG-01 reproduction shape.
+func loneInt(a, b string) (int, bool) {
+	pa, ea := parseInt(a)
+	pb, eb := parseInt(b)
+	switch {
+	case ea == nil && strings.TrimSpace(b) == "":
+		return pa, true
+	case eb == nil && strings.TrimSpace(a) == "":
+		return pb, true
+	}
+
+	return 0, false
 }
 
 // FuzzGetFloat ensures the float path never panics and respects its own ok

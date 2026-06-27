@@ -57,6 +57,10 @@
 //	qp.KeepEmpty()       // keep empty elements instead of dropping them
 //	qp.ErrorOnEmpty()    // reject the slice on any empty element
 //
+// A range and a set combine as a union: with both Between and OneOf a value is
+// valid if it is within the range OR in the set. An explicitly empty OneOf()
+// rejects everything (an empty allowed set means "nothing allowed").
+//
 // # Validation contract
 //
 // Value is always safe to use. When a present, non-empty parameter fails to
@@ -67,6 +71,10 @@
 //	// "?age=99": r.Value == 18, r.Error != nil
 //	// GetInt would return (18, false); PullInt a pointer to 18.
 //
+// Errors wrap the sentinels ErrInvalid, ErrNotAllowed, and ErrEmptyElement
+// (match with errors.Is) and carry a *ParseError with the key and offending
+// value (retrieve with errors.As).
+//
 // # Slices
 //
 // Slice parameters accept both the comma form ("?ids=1,2,3") and the repeated
@@ -76,6 +84,23 @@
 // element rejects the whole slice.
 //
 //	ids := qp.IntSlice(u, "ids", qp.Each(qp.Between(1, 100)))
+//
+// A single empty value ("?ids=") reads as an empty (present) slice. Empty
+// values among several ("?ids=&ids=5") are dropped like any other empty element,
+// so the non-empty values survive. Scalar readers instead take the first value,
+// matching url.Values.Get.
+//
+// # Custom types
+//
+// For types beyond the built-in four, the As family takes a parse function:
+//
+//	import "net/netip"
+//	addr, ok := qp.GetAs(q, "ip", netip.ParseAddr)
+//
+// Ready-made helpers cover time.Duration and time.Time:
+//
+//	ttl := q.Duration("ttl", qp.Default(30*time.Second), qp.Max(time.Hour))
+//	from := q.Time("from", time.RFC3339)
 //
 // # Boolean forms
 //

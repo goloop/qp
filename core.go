@@ -3,6 +3,7 @@ package qp
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -33,11 +34,11 @@ func getScalar[T any](
 
 	value, err := parse(data[0])
 	if err != nil {
-		r.Error = fmt.Errorf("invalid value for key %q: %q", key, data[0])
+		r.Error = invalidErr(key, data[0])
 		return r
 	}
 	if !c.valid(value) {
-		r.Error = fmt.Errorf("value not allowed for key %q: %q", key, data[0])
+		r.Error = notAllowedErr(key, data[0])
 		return r
 	}
 
@@ -56,12 +57,12 @@ func getSlice[T any](
 	opts []SliceOption[T],
 ) *Result[[]T] {
 	sc := newSliceConfig(opts)
-
-	def := sc.fallback
-	if def == nil {
-		def = []T{}
+	r := &Result[[]T]{
+		Key:      key,
+		Default:  cloneOrEmpty(sc.fallback),
+		Value:    cloneOrEmpty(sc.fallback),
+		Contains: true,
 	}
-	r := &Result[[]T]{Key: key, Default: def, Value: def, Contains: true}
 
 	data, ok := values[key]
 	if !ok {
@@ -70,21 +71,24 @@ func getSlice[T any](
 		r.Empty = true
 		return r
 	}
-	if len(data) == 0 || data[0] == "" {
-		// The parameter is present but carries no value.
+	if len(data) == 1 && data[0] == "" {
+		// The parameter is present as a single empty value ("?ids=").
+		// Note: a leading empty value among several ("?ids=&ids=5") is NOT
+		// treated as empty here — it flows into the loop below so the
+		// non-empty values survive, per the documented normalisation.
 		r.Empty = true
 		return r
 	}
 
 	out := make([]T, 0, len(data))
 	for _, raw := range data {
-		for _, part := range strings.Split(raw, sc.sep) {
+		for part := range strings.SplitSeq(raw, sc.sep) {
 			part = strings.TrimSpace(part)
 			if part == "" {
 				switch sc.empty {
 				case emptyError:
-					r.Error = fmt.Errorf("empty element for key %q", key)
-					r.Value = def
+					r.Error = emptyElementErr(key)
+					r.Value = cloneOrEmpty(sc.fallback)
 					return r
 				case emptySkip:
 					continue
@@ -94,13 +98,13 @@ func getSlice[T any](
 
 			value, err := parse(part)
 			if err != nil {
-				r.Error = fmt.Errorf("invalid value for key %q: %q", key, part)
-				r.Value = def
+				r.Error = invalidErr(key, part)
+				r.Value = cloneOrEmpty(sc.fallback)
 				return r
 			}
 			if !sc.each.valid(value) {
-				r.Error = fmt.Errorf("value not allowed for key %q: %q", key, part)
-				r.Value = def
+				r.Error = notAllowedErr(key, part)
+				r.Value = cloneOrEmpty(sc.fallback)
 				return r
 			}
 
@@ -110,6 +114,18 @@ func getSlice[T any](
 
 	r.Value = out
 	return r
+}
+
+// cloneOrEmpty returns an independent copy of the fallback slice, or a fresh
+// empty (non-nil) slice when no fallback was configured. Cloning keeps each read
+// independent: a returned default can never be aliased by the caller's slice or
+// shared between two reads.
+func cloneOrEmpty[T any](fallback []T) []T {
+	if fallback == nil {
+		return []T{}
+	}
+
+	return slices.Clone(fallback)
 }
 
 // ok reports the success flag used by the Get* family: the parameter is

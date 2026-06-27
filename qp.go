@@ -1,6 +1,9 @@
 package qp
 
-import "net/url"
+import (
+	"net/url"
+	"slices"
+)
 
 // Result holds the outcome of parsing a single query parameter.
 //
@@ -68,10 +71,17 @@ func From(v url.Values) *Query {
 	return &Query{values: v}
 }
 
-// Values returns the underlying decoded query parameters. The returned map is
-// shared with the Query; callers must not modify it.
+// Values returns an independent copy of the decoded query parameters. Mutating
+// the returned map never affects the Query, so it is safe to hand out. Reading
+// many keys is cheaper through the typed methods, which share the Query's
+// snapshot without copying.
 func (q *Query) Values() url.Values {
-	return q.values
+	out := make(url.Values, len(q.values))
+	for k, v := range q.values {
+		out[k] = slices.Clone(v)
+	}
+
+	return out
 }
 
 // Contains reports whether the parameter is present in the query, regardless of
