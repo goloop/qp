@@ -1,14 +1,25 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/goloop/qp/v2)](https://goreportcard.com/report/github.com/goloop/qp/v2) [![License](https://img.shields.io/badge/license-MIT-brightgreen)](https://github.com/goloop/qp/blob/master/LICENSE) [![Go Reference](https://pkg.go.dev/badge/github.com/goloop/qp/v2.svg)](https://pkg.go.dev/github.com/goloop/qp/v2) [![Stay with Ukraine](https://img.shields.io/static/v1?label=Stay%20with&message=Ukraine%20♥&color=ffD700&labelColor=0057B8&style=flat)](https://u24.gov.ua/)
 
-
 # qp
 
-The **qp** package reads URL query parameters into typed Go values — with
-optional defaulting and validation, and without panicking on malformed input.
+`qp` reads URL query parameters into typed Go values — with optional defaulting
+and validation, and without panicking on malformed input.
 
 Instead of the manual `r.URL.Query().Get("age")` + `strconv.Atoi` +
-bounds-check dance, you read a parameter into the right type in one call.
+bounds-check dance, you read a parameter into the right type in one call. A
+`Query` holder decodes the raw query once and serves every read; a bad value
+falls back to the default and is *reported* via an error, never silently masked.
 
+## Features
+
+- Read into `int`, `float64`, `string`, `bool`, `time.Duration`, `time.Time`,
+  and their slices.
+- Defaulting and validation via composable options — `Default`, `Min`, `Max`,
+  `Between`, `OneOf`, plus per-element `Each` for slices.
+- Both `?ids=1,2,3` and `?ids=1&ids=2&ids=3` (and mixtures) handled the same way.
+- Boolean forms: `true/false`, `yes/no`, `on/off`, `1/0` (case-insensitive).
+- Custom types via `GetAs`/`PullAs` and a parse function.
+- nil-safe: a `nil` URL never panics. Zero dependencies.
 
 ## Installation
 
@@ -20,70 +31,20 @@ go get github.com/goloop/qp/v2
 import "github.com/goloop/qp/v2"
 ```
 
-## Migrating from v1
+Requires Go 1.24 or newer. The package has no third-party dependencies.
 
-v2 is a redesign; v1 code does not compile unchanged. The two changes that touch
-most code:
-
-1. **Import path** — add `/v2`:
-
-   ```go
-   import "github.com/goloop/qp/v2" // was: github.com/goloop/qp
-   ```
-
-2. **Positional arguments become options** — the old "second argument means
-   range, the rest are extras" rule is replaced by explicit options:
-
-   | v1 | v2 |
-   |----|----|
-   | `qp.GetInt(u, "age", 18)` | `qp.GetInt(u, "age", qp.Default(18))` |
-   | `qp.GetInt(u, "age", 18, 65)` | `qp.GetInt(u, "age", qp.Default(18), qp.Between(18, 65))` |
-   | `qp.GetInt(u, "age", 18, 65, 16, 70)` | `qp.GetInt(u, "age", qp.Default(18), qp.Between(18, 65), qp.OneOf(16, 70))` |
-   | `qp.GetString(u, "role", "guest", "admin")` | `qp.GetString(u, "role", qp.Default("guest"), qp.OneOf("admin"))` |
-   | `qp.GetIntSlice(u, "ids", []int{1, 2})` | `qp.GetIntSlice(u, "ids", qp.Fallback([]int{1, 2}))` |
-
-Other behavioural changes to be aware of:
-
-- **`Result`** dropped the `Min`/`Max`/`Others` fields and the `Value` type
-  constraint — constraints now live in the options.
-- **`Empty`** now reports `true` only for a *present* empty value; an absent
-  parameter is `false` (use `Contains` to tell them apart).
-- **Out-of-range / disallowed** values set `Error` and fall back to the default;
-  `Get` returns `ok=false` (this was ambiguous in v1).
-- **Errors** are typed: match `ErrInvalid`/`ErrNotAllowed`/`ErrEmptyElement` with
-  `errors.Is`, or pull a `*ParseError` with `errors.As`.
-
-New in v2: the `Query` holder (`qp.New`), custom-type readers (`ParseAs`,
-`Duration`, `Time`), per-element slice validation (`Each`), and custom
-separators (`Sep`). Nothing was removed in capability — only the calling style
-changed.
-
-## Features
-
-- Read into `int`, `float64`, `string`, `bool`, and their slices
-- Defaulting and validation via composable options (range, allowed set)
-- Per-element validation for slices
-- Both `?ids=1,2,3` and `?ids=1&ids=2&ids=3` (and mixtures) handled the same way
-- Boolean forms: `true/false`, `yes/no`, `on/off`, `1/0` (case-insensitive)
-- Decodes the query string once per request via a holder
-- nil-safe: a `nil` URL never panics
-- Zero dependencies
-
-## The Query holder
-
-A query string is rarely read one parameter at a time, so the central type is a
-holder that decodes the raw query once and serves every read from it:
+## Quick start
 
 ```go
 q := qp.New(r.URL) // nil-safe; decodes r.URL.Query() exactly once
 
 page  := q.Int("page", qp.Default(1), qp.Min(1))
 limit := q.Int("limit", qp.Default(20), qp.Between(1, 100))
-sort  := q.String("sort", qp.Default("created_at"))
+sort  := q.String("sort", qp.Default("created_at"), qp.OneOf("created_at", "name"))
 tags  := q.StringSlice("tag")
 ```
 
-For a single read there are top-level shortcuts that build a throwaway holder:
+For a single read, top-level shortcuts build a throwaway holder:
 
 ```go
 age, ok := qp.GetInt(r.URL, "age", qp.Between(18, 65))
@@ -101,151 +62,25 @@ only in the return shape:
 | Pull   | `q.PullInt("age")`             | `*value` (nil if absent) |
 | Parse  | `q.ParseInt("age")`            | full `*Result` with flags and error |
 
-## Options
-
-Scalar options:
-
-```go
-qp.Default(v)        // value used when absent, empty, or invalid
-qp.Min(v)            // open-ended lower bound
-qp.Max(v)            // open-ended upper bound
-qp.Between(lo, hi)   // inclusive range, bounds auto-swapped
-qp.OneOf(a, b, c)    // allowed set (the way to validate strings)
-```
-
-Slice options:
-
-```go
-qp.Each(opts...)     // apply scalar validation to every element
-qp.Sep(";")          // custom separator (default ",")
-qp.Fallback(v)       // default slice when absent, empty, or invalid
-qp.KeepEmpty()       // keep empty elements instead of dropping them
-qp.ErrorOnEmpty()    // reject the slice on any empty element
-```
-
-## Validation contract
-
-`Value` is always safe to use. When a present, non-empty parameter fails to
-parse or violates a constraint, `Value` falls back to the default and `Error`
-explains why — the failure is reported, never silently masked:
+`Value` is always safe to use. When a present, non-empty value fails to parse or
+violates a constraint, it falls back to the default and the error explains why:
 
 ```go
 r := qp.ParseInt(u, "age", qp.Default(18), qp.Between(18, 65))
-// "?age=99": r.Value == 18, r.Error != nil
-// GetInt would return (18, false); PullInt a pointer to 18.
+// "?age=99": r.Value == 18, r.Error != nil (wraps qp.ErrNotAllowed)
 ```
 
-Errors wrap sentinels (`ErrInvalid`, `ErrNotAllowed`, `ErrEmptyElement`) and a
-`*ParseError` with the key and offending value:
+## Documentation
 
-```go
-if errors.Is(r.Error, qp.ErrNotAllowed) {
-    var pe *qp.ParseError
-    errors.As(r.Error, &pe) // pe.Key, pe.Value
-}
-```
-
-## Custom types
-
-For types beyond `int`/`float64`/`string`/`bool`, the `As` family takes a parse
-function; `Duration` and `Time` are ready-made:
-
-```go
-import "net/netip"
-
-addr, ok := qp.GetAs(q, "ip", netip.ParseAddr)
-
-ttl  := q.Duration("ttl", qp.Default(30*time.Second), qp.Max(time.Hour))
-from := q.Time("from", time.RFC3339)
-```
-
-## Slices
-
-Slice parameters accept the comma form, the repeated form, and mixtures of the
-two, all normalised the same way: every value is split by the separator, each
-element is trimmed, and empty elements are dropped by default. A single invalid
-element rejects the whole slice.
-
-```go
-u, _ := url.Parse("http://example.com?ids=1,2&ids=3")
-ids := qp.IntSlice(u, "ids", qp.Each(qp.Between(1, 100))) // [1 2 3]
-```
-
-## Examples
-
-### Reading typed values
-
-```go
-u, _ := url.Parse("http://example.com?age=25&temp=36.6&name=alice&active=true")
-q := qp.New(u)
-
-age    := q.Int("age", qp.Between(0, 120))
-temp   := q.Float("temp")
-name   := q.String("name", qp.Default("guest"))
-active := q.Bool("active")
-```
-
-### Validating against an allowed set
-
-```go
-role, ok := q.GetString("role", qp.Default("guest"), qp.OneOf("admin", "user"))
-// "?role=hacker" -> role == "guest", ok == false
-```
-
-### Optional SQL filters
-
-`Pull` methods make optional filters concise — a nil pointer means "not
-supplied", so only the parameters actually present enter the `WHERE` clause:
-
-```go
-func where(isActive, isStaff, isSuperuser *bool) string {
-    check := [...]struct {
-        name  string
-        value *bool
-    }{
-        {name: "is_active", value: isActive},
-        {name: "is_staff", value: isStaff},
-        {name: "is_superuser", value: isSuperuser},
-    }
-
-    and := make([]string, 0, len(check))
-    for _, m := range check {
-        if m.value != nil {
-            and = append(and, fmt.Sprintf("%s=%t", m.name, *m.value))
-        }
-    }
-
-    if len(and) != 0 {
-        return "WHERE " + strings.Join(and, ", ")
-    }
-    return ""
-}
-
-u, _ := url.Parse("http://example.com?is_active=true&is_staff=false")
-q := qp.New(u)
-query := where(
-    q.PullBool("is_active"),
-    q.PullBool("is_staff"),
-    q.PullBool("is_superuser"), // nil
-)
-// Result: WHERE is_active=true, is_staff=false
-```
-
-### Presence checks
-
-```go
-if q.Contains("id") {
-    // "id" was supplied (possibly as "?id=")
-}
-if q.Empty("id") {
-    // "id" was supplied with an empty value
-}
-```
+- Full reference and recipes: [DOC.md](DOC.md) · [DOC.UK.md](DOC.UK.md)
+- Package API: [pkg.go.dev/github.com/goloop/qp/v2](https://pkg.go.dev/github.com/goloop/qp/v2)
+- Changes between versions: [CHANGELOG.md](CHANGELOG.md)
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome. Please run `go test ./...`, `go vet ./...` and
+`gofmt -l .` before submitting a pull request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+`qp` is released under the MIT License. See [LICENSE](LICENSE).
