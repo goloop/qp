@@ -3,6 +3,7 @@ package qp
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestOutOfRangeContract pins the agreed contract (BUG-04): a present value that
@@ -27,6 +28,49 @@ func TestOutOfRangeContract(t *testing.T) {
 	p := PullInt(u, "age", Default(18), Between(18, 65))
 	if p == nil || *p != 18 {
 		t.Errorf("PullInt = %v, want pointer to 18", p)
+	}
+}
+
+// TestNaNRejectedByRange checks that a NaN float is rejected by any range
+// option (BUG-01), consistently for Min, Max and Between, instead of slipping
+// through a Max-only constraint.
+func TestNaNRejectedByRange(t *testing.T) {
+	cases := []struct {
+		name string
+		opts []Option[float64]
+	}{
+		{"max only", []Option[float64]{Max(100.0)}},
+		{"min only", []Option[float64]{Min(0.0)}},
+		{"between", []Option[float64]{Between(0.0, 100.0)}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			u := mustURL(t, "x=NaN")
+			r := ParseFloat(u, "x", tc.opts...)
+			if r.Error == nil {
+				t.Fatalf("NaN accepted under %s: Value=%v", tc.name, r.Value)
+			}
+		})
+	}
+	// A finite value within range is still accepted.
+	u := mustURL(t, "x=50")
+	if r := ParseFloat(u, "x", Max(100.0)); r.Error != nil {
+		t.Fatalf("finite value rejected: %v", r.Error)
+	}
+}
+
+// TestOneOfFuncEquality checks OneOfFunc uses the supplied equality (BUG-03):
+// time.Time.Equal accepts the same instant written with a different zone form,
+// where plain OneOf's == would reject it.
+func TestOneOfFuncEquality(t *testing.T) {
+	want := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	u := mustURL(t, "t=2024-01-01T00:00:00%2B00:00") // "+00:00" offset
+
+	if r := ParseTime(u, "t", time.RFC3339, OneOfFunc(time.Time.Equal, want)); r.Error != nil {
+		t.Fatalf("OneOfFunc(Equal) rejected an equal instant: %v", r.Error)
+	}
+	if r := ParseTime(u, "t", time.RFC3339, OneOf(want)); r.Error == nil {
+		t.Fatal("OneOf(==) should reject a differently-zoned instant")
 	}
 }
 

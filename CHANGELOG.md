@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0]
+
+Minor release: validation fixes and a new option. Fully backward compatible.
+
+### Added
+- `OneOfFunc(eq, vs...)`, an equality-customising form of `OneOf` for types
+  whose natural equality is not `==`, most notably `time.Time` (pass
+  `time.Time.Equal`).
+
+### Fixed
+- A NaN float is now rejected by any range option (`Min`, `Max`, `Between`)
+  instead of slipping through a `Max`-only constraint.
+- A key whose `url.Values` entry is a zero-length slice (buildable via `From`)
+  is reported as present-but-empty by the slice readers, matching the scalar
+  readers and `Query.Empty`.
+
+### Changed
+- Documented that `ParseTime`'s allowed set should use
+  `OneOfFunc(time.Time.Equal, ...)` so equal instants written with different
+  zone forms are not rejected.
+
 ## [2.0.0]
 
 Version 2 is a redesign. The module path is now `github.com/goloop/qp/v2` and

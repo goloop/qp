@@ -61,7 +61,10 @@ func (q *Query) PullDuration(
 
 // ParseTime reads a time.Time parameter using the given reference layout (as
 // accepted by time.Parse, e.g. time.RFC3339) and returns the full Result.
-// Range options do not apply to time.Time; Default and OneOf do.
+// Range options do not apply to time.Time; Default does. For an allowed set,
+// prefer OneOfFunc(time.Time.Equal, ...) over OneOf: OneOf compares with ==,
+// which distinguishes the same instant written with different zone forms (for
+// example a "+00:00" offset versus "Z"), while Equal compares the instant.
 //
 // Example usage:
 //

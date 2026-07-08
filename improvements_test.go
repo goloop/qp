@@ -2,6 +2,7 @@ package qp
 
 import (
 	"errors"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -43,6 +44,21 @@ func TestSinglePresentEmptySliceStillEmpty(t *testing.T) {
 	}
 	if len(r.Value) != 0 {
 		t.Errorf("Value = %v, want empty slice", r.Value)
+	}
+}
+
+// TestFromEmptyValueSliceIsEmpty guards the slice engine against a key whose
+// url.Values entry is a zero-length slice (buildable via From): it must be
+// reported as present-but-empty, matching the scalar engine and Query.Empty.
+func TestFromEmptyValueSliceIsEmpty(t *testing.T) {
+	q := From(url.Values{"k": {}})
+	r := q.ParseIntSlice("k")
+	if !r.Contains || !r.Empty || r.Error != nil {
+		t.Errorf("From empty slice -> Contains=%v Empty=%v Error=%v, want true/true/nil",
+			r.Contains, r.Empty, r.Error)
+	}
+	if !q.Empty("k") {
+		t.Error("Query.Empty(k) = false, want true for a present-but-empty key")
 	}
 }
 

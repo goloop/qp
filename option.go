@@ -13,8 +13,11 @@ type config[T any] struct {
 
 	// Range bounds. compare is installed by Min/Max/Between (which require an
 	// ordered T); it stays nil when no range option is used, so the generic
-	// engine never needs T to be ordered.
+	// engine never needs T to be ordered. selfEq is installed alongside and is
+	// false only for a value that does not equal itself (a NaN float), so a NaN
+	// is never treated as within range.
 	compare func(a, b T) int
+	selfEq  func(v T) bool
 	hasMin  bool
 	min     T
 	hasMax  bool
@@ -53,6 +56,9 @@ func (c *config[T]) valid(v T) bool {
 
 	if hasRange {
 		ok := true
+		if c.selfEq != nil && !c.selfEq(v) {
+			ok = false // a NaN is not within any range
+		}
 		if c.hasMin && c.compare(v, c.min) < 0 {
 			ok = false
 		}
@@ -90,6 +96,7 @@ func Min[T cmp.Ordered](v T) Option[T] {
 		c.hasMin = true
 		c.min = v
 		c.compare = cmp.Compare[T]
+		c.selfEq = func(v T) bool { return v == v }
 	}
 }
 
@@ -100,6 +107,7 @@ func Max[T cmp.Ordered](v T) Option[T] {
 		c.hasMax = true
 		c.max = v
 		c.compare = cmp.Compare[T]
+		c.selfEq = func(v T) bool { return v == v }
 	}
 }
 
@@ -115,6 +123,7 @@ func Between[T cmp.Ordered](lo, hi T) Option[T] {
 		c.hasMin, c.min = true, lo
 		c.hasMax, c.max = true, hi
 		c.compare = cmp.Compare[T]
+		c.selfEq = func(v T) bool { return v == v }
 	}
 }
 
@@ -131,5 +140,18 @@ func OneOf[T comparable](vs ...T) Option[T] {
 		c.hasOneOf = true
 		c.oneOf = append(c.oneOf, vs...)
 		c.eq = func(a, b T) bool { return a == b }
+	}
+}
+
+// OneOfFunc restricts the value to the given set, comparing values with eq. It
+// is the equality-customising form of OneOf for types whose natural equality is
+// not ==, most notably time.Time (pass time.Time.Equal), where two values can
+// denote the same instant yet differ bit for bit. It combines with a range as a
+// union, exactly like OneOf, and an explicitly empty set rejects every value.
+func OneOfFunc[T any](eq func(a, b T) bool, vs ...T) Option[T] {
+	return func(c *config[T]) {
+		c.hasOneOf = true
+		c.oneOf = append(c.oneOf, vs...)
+		c.eq = eq
 	}
 }

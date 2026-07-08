@@ -71,8 +71,10 @@ func getSlice[T any](
 		r.Empty = true
 		return r
 	}
-	if len(data) == 1 && data[0] == "" {
-		// The parameter is present as a single empty value ("?ids=").
+	if len(data) == 0 || (len(data) == 1 && data[0] == "") {
+		// The parameter is present but empty: either a single empty value
+		// ("?ids=") or a key whose value slice is empty (possible via From with
+		// a hand-built url.Values). Both match the scalar engine and Query.Empty.
 		// Note: a leading empty value among several ("?ids=&ids=5") is NOT
 		// treated as empty here — it flows into the loop below so the
 		// non-empty values survive, per the documented normalisation.
