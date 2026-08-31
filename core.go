@@ -37,6 +37,9 @@ func getScalar[T any](
 		r.Error = invalidErr(key, data[0])
 		return r
 	}
+	// Clamp (when set) folds the value into range before validation, so a
+	// clamped reader never rejects a parseable value — it returns the bound.
+	value = c.clamp(value)
 	if !c.valid(value) {
 		r.Error = notAllowedErr(key, data[0])
 		return r

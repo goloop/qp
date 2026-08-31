@@ -29,6 +29,13 @@ type config[T any] struct {
 	eq       func(a, b T) bool
 	hasOneOf bool
 	oneOf    []T
+
+	// Clamp bounds. Unlike a range, which rejects an out-of-range value (falling
+	// back to the default), a clamp folds it into [clampLo, clampHi]. Installed
+	// by Clamp, which also installs compare/selfEq.
+	hasClamp bool
+	clampLo  T
+	clampHi  T
 }
 
 // newConfig folds the given options into a config.
@@ -41,6 +48,25 @@ func newConfig[T any](opts []Option[T]) config[T] {
 	}
 
 	return c
+}
+
+// clamp folds v into [clampLo, clampHi] when Clamp was set, and returns v
+// unchanged otherwise. A value that does not equal itself (a NaN float) folds
+// to the low bound rather than escaping the range.
+func (c *config[T]) clamp(v T) T {
+	if !c.hasClamp {
+		return v
+	}
+	if c.selfEq != nil && !c.selfEq(v) {
+		return c.clampLo
+	}
+	if c.compare(v, c.clampLo) < 0 {
+		return c.clampLo
+	}
+	if c.compare(v, c.clampHi) > 0 {
+		return c.clampHi
+	}
+	return v
 }
 
 // valid reports whether v satisfies the configured constraints. With no range
@@ -91,6 +117,12 @@ func Default[T any](v T) Option[T] {
 
 // Min rejects values less than v. It can be combined with Max or used alone for
 // an open-ended lower bound.
+//
+// Note the open end: Min(1) floors the value but does not cap it, so a parsed
+// value can still be arbitrarily large. When the value then feeds arithmetic —
+// a page number multiplied into a SQL OFFSET, say — that unbounded top can
+// overflow. For a bounded range use Between; to fold an out-of-range value to
+// the nearest bound instead of rejecting it, use Clamp.
 func Min[T cmp.Ordered](v T) Option[T] {
 	return func(c *config[T]) {
 		c.hasMin = true
@@ -122,6 +154,26 @@ func Between[T cmp.Ordered](lo, hi T) Option[T] {
 	return func(c *config[T]) {
 		c.hasMin, c.min = true, lo
 		c.hasMax, c.max = true, hi
+		c.compare = cmp.Compare[T]
+		c.selfEq = func(v T) bool { return v == v }
+	}
+}
+
+// Clamp folds an out-of-range value into the inclusive range [lo, hi] instead
+// of rejecting it. Where Min/Max/Between reject a value outside the range — so
+// ?page=999999999 with Between(1, N) falls back to the default, and Min(1)
+// alone leaves the value unbounded above — Clamp keeps the value usable: it
+// returns the nearest bound. For a page number that means the last page rather
+// than a fallback or an overflow, which is almost always what a paginated
+// endpoint wants. The bounds are swapped automatically when lo > hi.
+func Clamp[T cmp.Ordered](lo, hi T) Option[T] {
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+	return func(c *config[T]) {
+		c.hasClamp = true
+		c.clampLo = lo
+		c.clampHi = hi
 		c.compare = cmp.Compare[T]
 		c.selfEq = func(v T) bool { return v == v }
 	}
