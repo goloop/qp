@@ -250,3 +250,7 @@ apply the default safely.
 **Custom separators and types.** Reach for `Sep` when clients send
 `a;b;c`, and `GetAs` when the value is a `netip.Addr`, a UUID-like token or any
 type with a `func(string) (T, error)` parser.
+
+## Release v2.2.1
+
+Apply slice clamps and avoid copying fallback values twice.

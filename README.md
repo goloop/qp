@@ -84,3 +84,7 @@ Contributions are welcome. Please run `go test ./...`, `go vet ./...` and
 ## License
 
 `qp` is released under the MIT License. See [LICENSE](LICENSE).
+
+## Release v2.2.1
+
+Apply slice clamps and avoid copying fallback values twice.

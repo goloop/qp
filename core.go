@@ -93,7 +93,6 @@ func getSlice[T any](
 				switch sc.empty {
 				case emptyError:
 					r.Error = emptyElementErr(key)
-					r.Value = cloneOrEmpty(sc.fallback)
 					return r
 				case emptySkip:
 					continue
@@ -104,12 +103,11 @@ func getSlice[T any](
 			value, err := parse(part)
 			if err != nil {
 				r.Error = invalidErr(key, part)
-				r.Value = cloneOrEmpty(sc.fallback)
 				return r
 			}
+			value = sc.each.clamp(value)
 			if !sc.each.valid(value) {
 				r.Error = notAllowedErr(key, part)
-				r.Value = cloneOrEmpty(sc.fallback)
 				return r
 			}
 
